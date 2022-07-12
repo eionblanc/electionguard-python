@@ -1,5 +1,23 @@
+from electionguard_tools.scripts import antiverification_generator
 from electionguard_tools.scripts import sample_generator
 
+from electionguard_tools.scripts.antiverification_generator import (
+    CIPHERTEXT_BALLOTS_DIR,
+    antiverify_5,
+    antiverify_5_a,
+    antiverify_5_b,
+    antiverify_5_c,
+    antiverify_5_d,
+    antiverify_5_e,
+    antiverify_5_f,
+    antiverify_5_g,
+    corrupt_contest_and_json_ballot,
+    corrupt_contest_and_serialize_ballot,
+    duplicate_election_data,
+    get_contest_index_by_id,
+    get_corrupt_filenames,
+    import_ballot_from_files,
+)
 from electionguard_tools.scripts.sample_generator import (
     DEFAULT_NUMBER_OF_BALLOTS,
     DEFAULT_SAMPLE_MANIFEST,
@@ -11,6 +29,7 @@ from electionguard_tools.scripts.sample_generator import (
 )
 
 __all__ = [
+    "CIPHERTEXT_BALLOTS_DIR",
     "DEFAULT_NUMBER_OF_BALLOTS",
     "DEFAULT_SAMPLE_MANIFEST",
     "DEFAULT_SPEC_VERSION",
@@ -18,5 +37,20 @@ __all__ = [
     "DEFAULT_USE_ALL_GUARDIANS",
     "DEFAULT_USE_PRIVATE_DATA",
     "ElectionSampleDataGenerator",
+    "antiverification_generator",
+    "antiverify_5",
+    "antiverify_5_a",
+    "antiverify_5_b",
+    "antiverify_5_c",
+    "antiverify_5_d",
+    "antiverify_5_e",
+    "antiverify_5_f",
+    "antiverify_5_g",
+    "corrupt_contest_and_json_ballot",
+    "corrupt_contest_and_serialize_ballot",
+    "duplicate_election_data",
+    "get_contest_index_by_id",
+    "get_corrupt_filenames",
+    "import_ballot_from_files",
     "sample_generator",
 ]

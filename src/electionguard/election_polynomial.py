@@ -79,7 +79,7 @@ def generate_polynomial(
         commitment = g_pow_p(value)
         proof = make_schnorr_proof(
             ElGamalKeyPair(value, commitment), rand_q()
-        )  # TODO Alternate schnoor proof method that doesn't need KeyPair
+        )  # TODO Alternate Schnorr proof method that doesn't need KeyPair
         coefficient = Coefficient(value, commitment, proof)
         coefficients.append(coefficient)
     return ElectionPolynomial(coefficients)
