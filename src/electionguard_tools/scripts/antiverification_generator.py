@@ -553,7 +553,7 @@ def corrupt_contest_and_json_ballot(
         json_corrupt = json.load(infile)
         for key, value in replacements.items():
             if key[:5] == "proof":
-                json_corrupt["contests"][contest_idx]["proof"][key[7:]] = value
+                json_corrupt["contests"][contest_idx]["proof"][key[6:]] = value
     with open(filename, "w", encoding="utf-8") as outfile:
         json.dump(json_corrupt, outfile)
 
