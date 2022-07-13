@@ -5,6 +5,10 @@ from copy import deepcopy
 import json
 from typing import Union, Tuple, List
 
+from electionguard.hash import CryptoHashable
+from typing import Sequence, Iterable
+from electionguard.big_integer import BigInteger
+
 # pylint: disable=no-name-in-module
 from gmpy2 import mpz
 
@@ -23,7 +27,9 @@ from electionguard.constants import (
 from electionguard.election import CiphertextElectionContext
 from electionguard.elgamal import ElGamalCiphertext
 from electionguard.group import (
+    ElementModP,
     ElementModQ,
+    ONE_MOD_P,
     ONE_MOD_Q,
     pow_p,
     g_pow_p,
@@ -235,17 +241,20 @@ def antiverify_5_d(
     # Recompute values
     a = proof.pad
     b = proof.data
-    a_corrupt = mpz(a.value) + get_large_prime()
-    pad_corrupt = f"{a_corrupt:X}"
+    a_corrupt = BigInteger(mpz(a.value) + get_large_prime())
+    a_corrupt_hex = a_corrupt.to_hex()
 
-    c_corrupt = hash_elems(context.crypto_extended_base_hash, alpha, beta, a_corrupt, b)
+    # Hash hex string from corrupt proof commitment, which does not lie in Z_p
+    # and thus cannot be cast to ElementModP. Currently, elements of type BigInteger
+    # but not either ElementModP or ElementModQ are hashed as decimal strings, not hex.
+    c_corrupt = hash_elems(context.crypto_extended_base_hash, alpha, beta, a_corrupt_hex, b)
     v_corrupt = add_q(
         proof.response, mult_q(r_sum, a_minus_b_q(c_corrupt, proof.challenge))
     )
 
     # Override contest proof and other values for ciphertext and submitted ballots
     replacements = {
-        "proof_pad": pad_corrupt,
+        "proof_pad": a_corrupt_hex,
         "proof_challenge": c_corrupt,
         "proof_response": v_corrupt,
     }
@@ -318,7 +327,7 @@ def antiverify_5_f(
     c_corrupt = hash_elems(
         context.crypto_extended_base_hash, alpha, beta, a_corrupt, b_corrupt
     )
-    # The econtext.crypto_extended_base_hashuation in the while condition should easily fail
+    # The equation in the while condition should easily fail
     while mult_p(
         g_pow_p(mult_q(limit, c_corrupt)),
         pow_p(context.elgamal_public_key, add_q(nonce_a, mult_q(r_sum, c_corrupt))),
