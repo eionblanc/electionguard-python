@@ -5,9 +5,6 @@ from copy import deepcopy
 import json
 from typing import Union, Tuple, List
 
-from electionguard.hash import CryptoHashable
-from typing import Sequence, Iterable
-from electionguard.big_integer import BigInteger
 
 # pylint: disable=no-name-in-module
 from gmpy2 import mpz
@@ -17,6 +14,7 @@ from electionguard.ballot import (
     CiphertextBallot,
     SubmittedBallot,
 )
+from electionguard.big_integer import BigInteger
 from electionguard.chaum_pedersen import ConstantChaumPedersenProof
 from electionguard.constants import (
     ElectionConstants,
@@ -27,9 +25,7 @@ from electionguard.constants import (
 from electionguard.election import CiphertextElectionContext
 from electionguard.elgamal import ElGamalCiphertext
 from electionguard.group import (
-    ElementModP,
     ElementModQ,
-    ONE_MOD_P,
     ONE_MOD_Q,
     pow_p,
     g_pow_p,
@@ -247,7 +243,9 @@ def antiverify_5_d(
     # Hash hex string from corrupt proof commitment, which does not lie in Z_p
     # and thus cannot be cast to ElementModP. Currently, elements of type BigInteger
     # but not either ElementModP or ElementModQ are hashed as decimal strings, not hex.
-    c_corrupt = hash_elems(context.crypto_extended_base_hash, alpha, beta, a_corrupt_hex, b)
+    c_corrupt = hash_elems(
+        context.crypto_extended_base_hash, alpha, beta, a_corrupt_hex, b
+    )
     v_corrupt = add_q(
         proof.response, mult_q(r_sum, a_minus_b_q(c_corrupt, proof.challenge))
     )
