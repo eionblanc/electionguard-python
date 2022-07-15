@@ -3,19 +3,21 @@ from os import path, environ
 import shutil
 from copy import deepcopy
 import json
-from typing import Union, Tuple, List
+from typing import Union, Tuple
 
 
 # pylint: disable=no-name-in-module
 from gmpy2 import mpz
 
 from electionguard.ballot import (
-    CiphertextBallotContest,
     CiphertextBallot,
     SubmittedBallot,
 )
 from electionguard.big_integer import BigInteger
-from electionguard.chaum_pedersen import ConstantChaumPedersenProof
+from electionguard.chaum_pedersen import (
+    DisjunctiveChaumPedersenProof,
+    ConstantChaumPedersenProof,
+)
 from electionguard.constants import (
     ElectionConstants,
     get_large_prime,
@@ -34,6 +36,7 @@ from electionguard.group import (
     mult_q,
     add_q,
     a_minus_b_q,
+    a_plus_bc_q,
 )
 from electionguard.hash import hash_elems
 from electionguard.manifest import Manifest
@@ -52,6 +55,564 @@ from electionguard_tools.helpers.export import (
 CIPHERTEXT_BALLOTS_DIR = "ciphertext_ballots"
 
 # pylint: disable=redefined-outer-name
+
+
+def antiverify_4_a(
+    _data: str,
+    context: CiphertextElectionContext,
+    ballot_id: str,
+    contest_id: str,
+    selection_id_0: str,
+) -> None:
+    """
+    Generate an election record which fails only Verification (4.A).
+    To this end, we add the large prime to the first proof pad.
+    An alternative approach could do the same instead to the other proof pad
+    or either proof data. With more care, we could do the same to the ciphertext.
+
+    This example requires access to the ciphertext ballot (for the selection nonce)
+    and knowledge that the selection encrypts 0.
+    """
+    _cex = duplicate_election_data(_data, "4", "A")
+    _, ciphertext = import_ballot_from_files(_data, ballot_id)
+    assert isinstance(ciphertext, CiphertextBallot)
+
+    # Select contest and gather relevant values from ciphertext
+    contest_idx, selection_idx = get_selection_index_by_id(
+        ciphertext, contest_id, selection_id_0
+    )
+    selection = ciphertext.contests[contest_idx].ballot_selections[selection_idx]
+    alpha = selection.ciphertext.pad
+    beta = selection.ciphertext.data
+    r = selection.nonce
+    proof = selection.proof
+    assert isinstance(r, ElementModQ)
+    assert isinstance(proof, DisjunctiveChaumPedersenProof)
+
+    # Recompute values
+    a0 = proof.proof_zero_pad
+    b0 = proof.proof_zero_data
+    a0_corrupt = BigInteger(mpz(a0.value) + get_large_prime())
+    a0_corrupt_hex = a0_corrupt.to_hex()
+
+    c_corrupt = hash_elems(
+        context.crypto_extended_base_hash,
+        alpha,
+        beta,
+        a0_corrupt_hex,
+        b0,
+        proof.proof_one_pad,
+        proof.proof_one_data,
+    )
+    c0_corrupt = a_minus_b_q(c_corrupt, proof.proof_one_challenge)
+    v0_corrupt = a_plus_bc_q(
+        proof.proof_zero_response,
+        a_minus_b_q(c0_corrupt, proof.proof_zero_challenge),
+        r,
+    )
+
+    # Override selection proof and other values for ciphertext and submitted ballots
+    replacements = {
+        "proof_zero_pad": a0_corrupt_hex,
+        "proof_zero_challenge": c0_corrupt,
+        "proof_zero_response": v0_corrupt,
+        "challenge": c_corrupt,
+    }
+    for filename in get_corrupt_filenames(_cex):
+        corrupt_selection_and_json_ballot(
+            filename, contest_idx, selection_idx, replacements
+        )
+
+
+def antiverify_4_b(
+    _data: str, ballot_id: str, contest_id: str, selection_id_0: str
+) -> None:
+    """
+    Generate an election record which fails only Verification (4.B).
+    To this end, we increment the proof challenge away from the correct
+    hash value and change the proof accordingly.
+
+    This example requires access to the ciphertext ballot (for the selection nonce)
+    and knowledge that the selection encrypts 0.
+    """
+    _cex = duplicate_election_data(_data, "4", "B")
+    ballot, ciphertext = import_ballot_from_files(_data, ballot_id)
+    assert isinstance(ciphertext, CiphertextBallot)
+
+    # Select contest and gather relevant values from ballot
+    contest_idx, selection_idx = get_selection_index_by_id(
+        ciphertext, contest_id, selection_id_0
+    )
+    selection = ciphertext.contests[contest_idx].ballot_selections[selection_idx]
+    r = selection.nonce
+    proof = selection.proof
+    assert isinstance(r, ElementModQ)
+    assert isinstance(proof, DisjunctiveChaumPedersenProof)
+
+    # Recompute values
+    challenge_corrupt = add_q(proof.challenge, ONE_MOD_Q)
+    c0_corrupt = add_q(proof.proof_zero_challenge, ONE_MOD_Q)
+    v0_corrupt = add_q(proof.proof_zero_response, r)
+    proof_corrupt = DisjunctiveChaumPedersenProof(
+        proof_zero_pad=proof.proof_zero_pad,
+        proof_zero_data=proof.proof_zero_data,
+        proof_one_pad=proof.proof_one_pad,
+        proof_one_data=proof.proof_one_data,
+        proof_zero_challenge=c0_corrupt,
+        proof_one_challenge=proof.proof_one_challenge,
+        challenge=challenge_corrupt,
+        proof_zero_response=v0_corrupt,
+        proof_one_response=proof.proof_one_response,
+    )
+
+    # Override selection proof and other values for ciphertext and submitted ballots
+    replacements = {"proof": proof_corrupt}
+    corrupt_selection_and_serialize_ballot(
+        _cex, ciphertext, ballot_id, contest_idx, selection_idx, replacements
+    )
+    corrupt_selection_and_serialize_ballot(
+        _cex,
+        ballot,
+        ballot_id,
+        contest_idx,
+        selection_idx,
+        replacements,
+        is_cipher=False,
+    )
+
+
+def antiverify_4_c(
+    _data: str, ballot_id: str, contest_id: str, selection_id: str
+) -> None:
+    """
+    Generate an election record which fails only Verification (4.C).
+    To this end, we add the small prime to the first proof response.
+
+    This example requires no access to private election data.
+    """
+    _cex = duplicate_election_data(_data, "4", "C")
+    ballot, _ = import_ballot_from_files(_data, ballot_id, private_data=False)
+
+    # Select contest and gather relevant values from ballot
+    contest_idx, selection_idx = get_selection_index_by_id(
+        ballot, contest_id, selection_id
+    )
+    selection = ballot.contests[contest_idx].ballot_selections[selection_idx]
+    proof = selection.proof
+    assert isinstance(proof, DisjunctiveChaumPedersenProof)
+
+    # Recompute values
+    v0_corrupt = BigInteger(mpz(proof.proof_zero_response.value) + get_small_prime())
+    v0_corrupt_hex = v0_corrupt.to_hex()
+
+    # Override selection proof and other values for ciphertext and submitted ballots
+    replacements = {"proof_zero_response": v0_corrupt_hex}
+    for filename in get_corrupt_filenames(_cex):
+        corrupt_selection_and_json_ballot(
+            filename, contest_idx, selection_idx, replacements
+        )
+
+
+def antiverify_4_d(
+    _data: str,
+    context: CiphertextElectionContext,
+    ballot_id: str,
+    contest_id: str,
+    selection_id: str,
+    nonce_c0: ElementModQ,
+    nonce_c1: ElementModQ,
+    nonce_u0: ElementModQ,
+    nonce_u1: ElementModQ,
+) -> None:
+    """
+    Generate an election record which fails only Verification (4.D).
+    To this end, we construct the disjunctive Chaum-Pedersen proof without concern
+    for the hashed challenge value equaling the sum of anticipated challenges.
+
+    This example requires access to the ciphertext ballot (for the selection nonce)
+    and knowledge that the selection encrypts 0.
+    """
+    _cex = duplicate_election_data(_data, "4", "D")
+    ballot, ciphertext = import_ballot_from_files(_data, ballot_id)
+    assert isinstance(ciphertext, CiphertextBallot)
+
+    # Select contest and gather relevant values from ciphertext
+    contest_idx, selection_idx = get_selection_index_by_id(
+        ciphertext, contest_id, selection_id
+    )
+    selection = ciphertext.contests[contest_idx].ballot_selections[selection_idx]
+    alpha = selection.ciphertext.pad
+    beta = selection.ciphertext.data
+    r = selection.nonce
+    assert isinstance(r, ElementModQ)
+
+    # Recompute values
+    a0 = g_pow_p(nonce_u0)
+    b0 = pow_p(context.elgamal_public_key, nonce_u0)
+    a1 = g_pow_p(nonce_u1)
+    b1 = mult_p(pow_p(context.elgamal_public_key, nonce_u1), g_pow_p(nonce_c1))
+    c = hash_elems(context.crypto_extended_base_hash, alpha, beta, a0, b0, a1, b1)
+    # The equation in the while loop should easily fail
+    while c == add_q(nonce_c0, nonce_c1):
+        a0 = mult_p(a0, get_generator())
+        nonce_u0 = add_q(nonce_u0, ONE_MOD_Q)
+        b0 = mult_p(b0, context.elgamal_public_key)
+        c = hash_elems(context.crypto_extended_base_hash, alpha, beta, a0, b0, a1, b1)
+
+    v0 = a_plus_bc_q(nonce_u0, nonce_c0, r)
+    v1 = a_plus_bc_q(nonce_u1, nonce_c1, r)
+    proof_corrupt = DisjunctiveChaumPedersenProof(
+        a0, b0, a1, b1, nonce_c0, nonce_c1, c, v0, v1
+    )
+
+    # Override selection proof and other values for ciphertext and submitted ballots
+    replacements = {"proof": proof_corrupt}
+    corrupt_selection_and_serialize_ballot(
+        _cex, ciphertext, ballot_id, contest_idx, selection_idx, replacements
+    )
+    corrupt_selection_and_serialize_ballot(
+        _cex,
+        ballot,
+        ballot_id,
+        contest_idx,
+        selection_idx,
+        replacements,
+        is_cipher=False,
+    )
+
+
+def antiverify_4_e(
+    _data: str,
+    context: CiphertextElectionContext,
+    ballot_id: str,
+    contest_id: str,
+    selection_id_0: str,
+    nonce_a: ElementModQ,
+    nonce_b: ElementModQ,
+) -> None:
+    """
+    Generate an election record which fails only Verification (4.E).
+    To this end, we select commitments to violate a corollary of (4.E) and (4.G),
+    then carefully pick a response to satisfy (4.G).
+
+    This example requires access to the ciphertext ballot (for the selection nonce)
+    and knowledge that the selection encrypts 0.
+    """
+    _cex = duplicate_election_data(_data, "4", "E")
+    ballot, ciphertext = import_ballot_from_files(_data, ballot_id)
+    assert isinstance(ciphertext, CiphertextBallot)
+
+    # Select contest and gather relevant values from ciphertext
+    contest_idx, selection_idx = get_selection_index_by_id(
+        ciphertext, contest_id, selection_id_0
+    )
+    selection = ciphertext.contests[contest_idx].ballot_selections[selection_idx]
+    alpha = selection.ciphertext.pad
+    beta = selection.ciphertext.data
+    r = selection.nonce
+    proof = selection.proof
+    assert isinstance(r, ElementModQ)
+    assert isinstance(proof, DisjunctiveChaumPedersenProof)
+
+    # Recompute values only for true proof
+    b_corrupt = pow_p(context.elgamal_public_key, nonce_b)
+    a_corrupt = g_pow_p(nonce_a)
+    a1 = proof.proof_one_pad
+    b1 = proof.proof_one_data
+    c_corrupt = hash_elems(
+        context.crypto_extended_base_hash, alpha, beta, a_corrupt, b_corrupt, a1, b1
+    )
+    c1 = proof.proof_one_challenge
+    c0_corrupt = a_minus_b_q(c_corrupt, c1)
+    # The equation in the while condition should easily fail
+    while pow_p(
+        context.elgamal_public_key, a_plus_bc_q(nonce_a, r, c0_corrupt)
+    ) == mult_p(b_corrupt, pow_p(beta, c0_corrupt)):
+        a_corrupt = mult_p(a_corrupt, get_generator())
+        nonce_a = add_q(nonce_a, ONE_MOD_Q)
+        c_corrupt = hash_elems(
+            context.crypto_extended_base_hash, alpha, beta, a_corrupt, b_corrupt, a1, b1
+        )
+        c0_corrupt = a_minus_b_q(c_corrupt, c1)
+    v_corrupt = a_plus_bc_q(nonce_b, r, c0_corrupt)
+
+    proof_corrupt = DisjunctiveChaumPedersenProof(
+        proof_zero_pad=a_corrupt,
+        proof_zero_data=b_corrupt,
+        proof_one_pad=a1,
+        proof_one_data=b1,
+        proof_zero_challenge=c0_corrupt,
+        proof_one_challenge=c1,
+        challenge=c_corrupt,
+        proof_zero_response=v_corrupt,
+        proof_one_response=proof.proof_one_response,
+    )
+
+    # Override selection proof and other values for ciphertext and submitted ballots
+    replacements = {"proof": proof_corrupt}
+    corrupt_selection_and_serialize_ballot(
+        _cex, ciphertext, ballot_id, contest_idx, selection_idx, replacements
+    )
+    corrupt_selection_and_serialize_ballot(
+        _cex,
+        ballot,
+        ballot_id,
+        contest_idx,
+        selection_idx,
+        replacements,
+        is_cipher=False,
+    )
+
+
+def antiverify_4_f(
+    _data: str,
+    context: CiphertextElectionContext,
+    ballot_id: str,
+    contest_id: str,
+    selection_id_1: str,
+    nonce_a: ElementModQ,
+    nonce_b: ElementModQ,
+) -> None:
+    """
+    Generate an election record which fails only Verification (4.F).
+    To this end, we select commitments to violate a corollary of (4.F) and (4.H),
+    then carefully pick a response to satisfy (4.H).
+
+    This example requires access to the ciphertext ballot (for the selection nonce)
+    and knowledge that the selection encrypts 1.
+    """
+    _cex = duplicate_election_data(_data, "4", "F")
+    ballot, ciphertext = import_ballot_from_files(_data, ballot_id)
+    assert isinstance(ciphertext, CiphertextBallot)
+
+    # Select contest and gather relevant values from ciphertext
+    contest_idx, selection_idx = get_selection_index_by_id(
+        ciphertext, contest_id, selection_id_1
+    )
+    selection = ciphertext.contests[contest_idx].ballot_selections[selection_idx]
+    alpha = selection.ciphertext.pad
+    beta = selection.ciphertext.data
+    r = selection.nonce
+    proof = selection.proof
+    assert isinstance(r, ElementModQ)
+    assert isinstance(proof, DisjunctiveChaumPedersenProof)
+
+    # Recompute values only for true proof
+    b_corrupt = pow_p(context.elgamal_public_key, nonce_b)
+    a_corrupt = g_pow_p(nonce_a)
+    a0 = proof.proof_zero_pad
+    b0 = proof.proof_zero_data
+    c_corrupt = hash_elems(
+        context.crypto_extended_base_hash, alpha, beta, a0, b0, a_corrupt, b_corrupt
+    )
+    c0 = proof.proof_zero_challenge
+    c1_corrupt = a_minus_b_q(c_corrupt, c0)
+    # The equation in the while condition should easily fail
+    while mult_p(
+        g_pow_p(c1_corrupt),
+        pow_p(context.elgamal_public_key, a_plus_bc_q(nonce_a, r, c1_corrupt)),
+    ) == mult_p(b_corrupt, pow_p(beta, c1_corrupt)):
+        a_corrupt = mult_p(a_corrupt, get_generator())
+        nonce_a = add_q(nonce_a, ONE_MOD_Q)
+        c_corrupt = hash_elems(
+            context.crypto_extended_base_hash, alpha, beta, a0, b0, a_corrupt, b_corrupt
+        )
+        c1_corrupt = a_minus_b_q(c_corrupt, c0)
+    v_corrupt = a_plus_bc_q(nonce_b, r, c1_corrupt)
+
+    proof_corrupt = DisjunctiveChaumPedersenProof(
+        proof_zero_pad=a0,
+        proof_zero_data=b0,
+        proof_one_pad=a_corrupt,
+        proof_one_data=b_corrupt,
+        proof_zero_challenge=c0,
+        proof_one_challenge=c1_corrupt,
+        challenge=c_corrupt,
+        proof_zero_response=proof.proof_zero_response,
+        proof_one_response=v_corrupt,
+    )
+
+    # Override selection proof and other values for ciphertext and submitted ballots
+    replacements = {"proof": proof_corrupt}
+    corrupt_selection_and_serialize_ballot(
+        _cex, ciphertext, ballot_id, contest_idx, selection_idx, replacements
+    )
+    corrupt_selection_and_serialize_ballot(
+        _cex,
+        ballot,
+        ballot_id,
+        contest_idx,
+        selection_idx,
+        replacements,
+        is_cipher=False,
+    )
+
+
+def antiverify_4_g(
+    _data: str,
+    context: CiphertextElectionContext,
+    ballot_id: str,
+    contest_id: str,
+    selection_id_0: str,
+    nonce_a: ElementModQ,
+    nonce_b: ElementModQ,
+) -> None:
+    """
+    Generate an election record which fails only Verification (4.G).
+    To this end, we select commitments to violate a corollary of (4.E) and (4.G),
+    then carefully pick a response to satisfy (4.E).
+
+    This example requires access to the ciphertext ballot (for the selection nonce)
+    and knowledge that the selection encrypts 0.
+    """
+    _cex = duplicate_election_data(_data, "4", "G")
+    ballot, ciphertext = import_ballot_from_files(_data, ballot_id)
+    assert isinstance(ciphertext, CiphertextBallot)
+
+    # Select contest and gather relevant values from ciphertext
+    contest_idx, selection_idx = get_selection_index_by_id(
+        ciphertext, contest_id, selection_id_0
+    )
+    selection = ciphertext.contests[contest_idx].ballot_selections[selection_idx]
+    alpha = selection.ciphertext.pad
+    beta = selection.ciphertext.data
+    r = selection.nonce
+    proof = selection.proof
+    assert isinstance(r, ElementModQ)
+    assert isinstance(proof, DisjunctiveChaumPedersenProof)
+
+    # Recompute values only for true proof
+    a_corrupt = g_pow_p(nonce_a)
+    b_corrupt = g_pow_p(nonce_b)
+    a1 = proof.proof_one_pad
+    b1 = proof.proof_one_data
+    c_corrupt = hash_elems(
+        context.crypto_extended_base_hash, alpha, beta, a_corrupt, b_corrupt, a1, b1
+    )
+    c1 = proof.proof_one_challenge
+    c0_corrupt = a_minus_b_q(c_corrupt, c1)
+    # The equation in the while condition should easily fail
+    while pow_p(
+        context.elgamal_public_key, a_plus_bc_q(nonce_a, r, c0_corrupt)
+    ) == mult_p(b_corrupt, pow_p(beta, c0_corrupt)):
+        b_corrupt = mult_p(b_corrupt, get_generator())
+        c_corrupt = hash_elems(
+            context.crypto_extended_base_hash, alpha, beta, a_corrupt, b_corrupt, a1, b1
+        )
+        c0_corrupt = a_minus_b_q(c_corrupt, c1)
+    v_corrupt = a_plus_bc_q(nonce_a, r, c0_corrupt)
+
+    proof_corrupt = DisjunctiveChaumPedersenProof(
+        proof_zero_pad=a_corrupt,
+        proof_zero_data=b_corrupt,
+        proof_one_pad=a1,
+        proof_one_data=b1,
+        proof_zero_challenge=c0_corrupt,
+        proof_one_challenge=c1,
+        challenge=c_corrupt,
+        proof_zero_response=v_corrupt,
+        proof_one_response=proof.proof_one_response,
+    )
+
+    # Override selection proof and other values for ciphertext and submitted ballots
+    replacements = {"proof": proof_corrupt}
+    corrupt_selection_and_serialize_ballot(
+        _cex, ciphertext, ballot_id, contest_idx, selection_idx, replacements
+    )
+    corrupt_selection_and_serialize_ballot(
+        _cex,
+        ballot,
+        ballot_id,
+        contest_idx,
+        selection_idx,
+        replacements,
+        is_cipher=False,
+    )
+
+
+def antiverify_4_h(
+    _data: str,
+    context: CiphertextElectionContext,
+    ballot_id: str,
+    contest_id: str,
+    selection_id_1: str,
+    nonce_a: ElementModQ,
+    nonce_b: ElementModQ,
+) -> None:
+    """
+    Generate an election record which fails only Verification (4.H).
+    To this end, we select commitments to violate a corollary of (4.F) and (4.H),
+    then carefully pick a response to satisfy (4.F).
+
+    This example requires access to the ciphertext ballot (for the selection nonce)
+    and knowledge that the selection encrypts 1.
+    """
+    _cex = duplicate_election_data(_data, "4", "H")
+    ballot, ciphertext = import_ballot_from_files(_data, ballot_id)
+    assert isinstance(ciphertext, CiphertextBallot)
+
+    # Select contest and gather relevant values from ciphertext
+    contest_idx, selection_idx = get_selection_index_by_id(
+        ciphertext, contest_id, selection_id_1
+    )
+    selection = ciphertext.contests[contest_idx].ballot_selections[selection_idx]
+    alpha = selection.ciphertext.pad
+    beta = selection.ciphertext.data
+    r = selection.nonce
+    proof = selection.proof
+    assert isinstance(r, ElementModQ)
+    assert isinstance(proof, DisjunctiveChaumPedersenProof)
+
+    # Recompute values only for true proof
+    a_corrupt = g_pow_p(nonce_a)
+    b_corrupt = g_pow_p(nonce_b)
+    a0 = proof.proof_zero_pad
+    b0 = proof.proof_zero_data
+    c_corrupt = hash_elems(
+        context.crypto_extended_base_hash, alpha, beta, a0, b0, a_corrupt, b_corrupt
+    )
+    c0 = proof.proof_zero_challenge
+    c1_corrupt = a_minus_b_q(c_corrupt, c0)
+    # The equation in the while condition should easily fail
+    while mult_p(
+        g_pow_p(c1_corrupt),
+        pow_p(context.elgamal_public_key, a_plus_bc_q(nonce_a, r, c1_corrupt)),
+    ) == mult_p(b_corrupt, pow_p(beta, c1_corrupt)):
+        b_corrupt = mult_p(b_corrupt, get_generator())
+        c_corrupt = hash_elems(
+            context.crypto_extended_base_hash, alpha, beta, a0, b0, a_corrupt, b_corrupt
+        )
+        c1_corrupt = a_minus_b_q(c_corrupt, c0)
+    v_corrupt = a_plus_bc_q(nonce_a, r, c1_corrupt)
+
+    proof_corrupt = DisjunctiveChaumPedersenProof(
+        proof_zero_pad=a0,
+        proof_zero_data=b0,
+        proof_one_pad=a_corrupt,
+        proof_one_data=b_corrupt,
+        proof_zero_challenge=c0,
+        proof_one_challenge=c1_corrupt,
+        challenge=c_corrupt,
+        proof_zero_response=proof.proof_zero_response,
+        proof_one_response=v_corrupt,
+    )
+
+    # Override selection proof and other values for ciphertext and submitted ballots
+    replacements = {"proof": proof_corrupt}
+    corrupt_selection_and_serialize_ballot(
+        _cex, ciphertext, ballot_id, contest_idx, selection_idx, replacements
+    )
+    corrupt_selection_and_serialize_ballot(
+        _cex,
+        ballot,
+        ballot_id,
+        contest_idx,
+        selection_idx,
+        replacements,
+        is_cipher=False,
+    )
+
+
 def antiverify_5_a(
     _data: str,
     context: CiphertextElectionContext,
@@ -74,7 +635,7 @@ def antiverify_5_a(
     assert isinstance(ciphertext, CiphertextBallot)
 
     # Select contest and gather relevant values from ciphertext
-    contest_idx = get_contest_index_by_id(ciphertext.contests, contest_id)
+    contest_idx = get_contest_index_by_id(ciphertext, contest_id)
     contest = ciphertext.contests[contest_idx]
     selections = contest.ballot_selections
     alpha = contest.ciphertext_accumulation.pad
@@ -98,7 +659,7 @@ def antiverify_5_a(
     a = g_pow_p(nonce)
     b = pow_p(context.elgamal_public_key, nonce)
     c = hash_elems(context.crypto_extended_base_hash, alpha_corrupt, beta_corrupt, a, b)
-    v = add_q(nonce, mult_q(c, r_sum_corrupt))
+    v = a_plus_bc_q(nonce, c, r_sum_corrupt)
     proof_corrupt = ConstantChaumPedersenProof(
         pad=a,
         data=b,
@@ -143,7 +704,7 @@ def antiverify_5_b(
     assert isinstance(ciphertext, CiphertextBallot)
 
     # Select contest and gather relevant values from ciphertext
-    contest_idx = get_contest_index_by_id(ciphertext.contests, contest_id)
+    contest_idx = get_contest_index_by_id(ciphertext, contest_id)
     contest = ciphertext.contests[contest_idx]
     alpha = contest.ciphertext_accumulation.pad
     beta = contest.ciphertext_accumulation.data
@@ -161,7 +722,7 @@ def antiverify_5_b(
     a = g_pow_p(nonce)
     b = pow_p(context.elgamal_public_key, nonce)
     c = hash_elems(context.crypto_extended_base_hash, alpha_corrupt, beta_corrupt, a, b)
-    v = add_q(nonce, mult_q(c, add_q(r_sum, t)))
+    v = a_plus_bc_q(nonce, c, add_q(r_sum, t))
     proof_corrupt = ConstantChaumPedersenProof(
         pad=a,
         data=b,
@@ -196,16 +757,17 @@ def antiverify_5_c(_data: str, ballot_id: str, contest_id: str) -> None:
     ballot, _ = import_ballot_from_files(_data, ballot_id, private_data=False)
 
     # Select contest and gather relevant values from ballot
-    contest_idx = get_contest_index_by_id(ballot.contests, contest_id)
+    contest_idx = get_contest_index_by_id(ballot, contest_id)
     contest = ballot.contests[contest_idx]
     proof = contest.proof
     assert isinstance(proof, ConstantChaumPedersenProof)
 
     # Recompute values
-    response_corrupt = f"{mpz(proof.response.value) + get_small_prime():X}"
+    response_corrupt = BigInteger(mpz(proof.response.value) + get_small_prime())
+    response_corrupt_hex = response_corrupt.to_hex()
 
     # Override contest proof and other values for ciphertext and submitted ballots
-    replacements = {"proof_response": response_corrupt}
+    replacements = {"proof_response": response_corrupt_hex}
     for filename in get_corrupt_filenames(_cex):
         corrupt_contest_and_json_ballot(filename, contest_idx, replacements)
 
@@ -225,7 +787,7 @@ def antiverify_5_d(
     assert isinstance(ciphertext, CiphertextBallot)
 
     # Select contest and gather relevant values from ciphertext
-    contest_idx = get_contest_index_by_id(ciphertext.contests, contest_id)
+    contest_idx = get_contest_index_by_id(ciphertext, contest_id)
     contest = ciphertext.contests[contest_idx]
     alpha = contest.ciphertext_accumulation.pad
     beta = contest.ciphertext_accumulation.data
@@ -246,8 +808,8 @@ def antiverify_5_d(
     c_corrupt = hash_elems(
         context.crypto_extended_base_hash, alpha, beta, a_corrupt_hex, b
     )
-    v_corrupt = add_q(
-        proof.response, mult_q(r_sum, a_minus_b_q(c_corrupt, proof.challenge))
+    v_corrupt = a_plus_bc_q(
+        proof.response, r_sum, a_minus_b_q(c_corrupt, proof.challenge)
     )
 
     # Override contest proof and other values for ciphertext and submitted ballots
@@ -271,16 +833,17 @@ def antiverify_5_e(_data: str, ballot_id: str, contest_id: str) -> None:
     ballot, _ = import_ballot_from_files(_data, ballot_id, private_data=False)
 
     # Select contest and gather relevant values from ballot
-    contest_idx = get_contest_index_by_id(ballot.contests, contest_id)
+    contest_idx = get_contest_index_by_id(ballot, contest_id)
     contest = ballot.contests[contest_idx]
     proof = contest.proof
     assert isinstance(proof, ConstantChaumPedersenProof)
 
     # Recompute values
-    challenge_corrupt = f"{mpz(proof.challenge.value) + get_small_prime():X}"
+    challenge_corrupt = BigInteger(mpz(proof.challenge.value) + get_small_prime())
+    challenge_corrupt_hex = challenge_corrupt.to_hex()
 
     # Override contest proof and other values for ciphertext and submitted ballots
-    replacements = {"proof_challenge": challenge_corrupt}
+    replacements = {"proof_challenge": challenge_corrupt_hex}
     for filename in get_corrupt_filenames(_cex):
         corrupt_contest_and_json_ballot(filename, contest_idx, replacements)
 
@@ -306,7 +869,7 @@ def antiverify_5_f(
     assert isinstance(ciphertext, CiphertextBallot)
 
     # Select contest and gather relevant values from ciphertext
-    contest_idx = get_contest_index_by_id(ciphertext.contests, contest_id)
+    contest_idx = get_contest_index_by_id(ciphertext, contest_id)
     contest = ciphertext.contests[contest_idx]
     alpha = contest.ciphertext_accumulation.pad
     beta = contest.ciphertext_accumulation.data
@@ -328,14 +891,14 @@ def antiverify_5_f(
     # The equation in the while condition should easily fail
     while mult_p(
         g_pow_p(mult_q(limit, c_corrupt)),
-        pow_p(context.elgamal_public_key, add_q(nonce_a, mult_q(r_sum, c_corrupt))),
+        pow_p(context.elgamal_public_key, a_plus_bc_q(nonce_a, r_sum, c_corrupt)),
     ) == mult_p(b_corrupt, pow_p(beta, c_corrupt)):
         a_corrupt = mult_p(a_corrupt, get_generator())
         nonce_a = add_q(nonce_a, ONE_MOD_Q)
         c_corrupt = hash_elems(
             context.crypto_extended_base_hash, alpha, beta, a_corrupt, b_corrupt
         )
-    v_corrupt = add_q(nonce_b, mult_q(r_sum, c_corrupt))
+    v_corrupt = a_plus_bc_q(nonce_b, r_sum, c_corrupt)
     proof_corrupt = ConstantChaumPedersenProof(
         pad=a_corrupt,
         data=b_corrupt,
@@ -376,7 +939,7 @@ def antiverify_5_g(
     assert isinstance(ciphertext, CiphertextBallot)
 
     # Select contest and gather relevant values from ciphertext
-    contest_idx = get_contest_index_by_id(ciphertext.contests, contest_id)
+    contest_idx = get_contest_index_by_id(ciphertext, contest_id)
     contest = ciphertext.contests[contest_idx]
     alpha = contest.ciphertext_accumulation.pad
     beta = contest.ciphertext_accumulation.data
@@ -398,13 +961,13 @@ def antiverify_5_g(
     # The equation in the while condition should easily fail
     while mult_p(
         g_pow_p(mult_q(limit, c_corrupt)),
-        pow_p(context.elgamal_public_key, add_q(nonce_a, mult_q(r_sum, c_corrupt))),
+        pow_p(context.elgamal_public_key, a_plus_bc_q(nonce_a, r_sum, c_corrupt)),
     ) == mult_p(b_corrupt, pow_p(beta, c_corrupt)):
         b_corrupt = mult_p(b_corrupt, get_generator())
         c_corrupt = hash_elems(
             context.crypto_extended_base_hash, alpha, beta, a_corrupt, b_corrupt
         )
-    v_corrupt = add_q(nonce_a, mult_q(r_sum, c_corrupt))
+    v_corrupt = a_plus_bc_q(nonce_a, r_sum, c_corrupt)
     proof_corrupt = ConstantChaumPedersenProof(
         pad=a_corrupt,
         data=b_corrupt,
@@ -422,32 +985,6 @@ def antiverify_5_g(
     corrupt_contest_and_serialize_ballot(
         _cex, ballot, ballot_id, contest_idx, replacements, is_cipher=False
     )
-
-
-def antiverify_5(
-    _data: str,
-    manifest: Manifest,
-    context: CiphertextElectionContext,
-    ballot_id: str,
-    contest_id: str,
-) -> None:
-    """
-    For each subcheck in Verification 5, generate an election record
-    which fails only that subcheck.
-    Contest hash values are not currently re-computed.
-
-    An appropriate ballot and contest is one which is not an undervote
-    and for which there is a ciphertext ballot available.
-    """
-    seed = ElementModQ(17)
-    nonces = Nonces(seed)
-    antiverify_5_a(_data, context, ballot_id, contest_id, nonces[0])
-    antiverify_5_b(_data, context, ballot_id, contest_id, nonces[1])
-    antiverify_5_c(_data, ballot_id, contest_id)
-    antiverify_5_d(_data, context, ballot_id, contest_id)
-    antiverify_5_e(_data, ballot_id, contest_id)
-    antiverify_5_f(_data, manifest, context, ballot_id, contest_id, *nonces[2:4])
-    antiverify_5_g(_data, manifest, context, ballot_id, contest_id, *nonces[4:6])
 
 
 def duplicate_election_data(_data: str, check: str, subcheck: str) -> str:
@@ -487,15 +1024,26 @@ def import_ballot_from_files(
     return ballot, None
 
 
-def get_contest_index_by_id(
-    contests: List[CiphertextBallotContest], contest_id: str
-) -> int:
+def get_contest_index_by_id(ballot: CiphertextBallot, contest_id: str) -> int:
     # Step through contests until match is found; this accommodates contests
     # listed out of sequence order as well as contests from compact ballots
-    for j, contest in enumerate(contests):
+    for j, contest in enumerate(ballot.contests):
         if contest.object_id == contest_id:
             return j
     return -1
+
+
+def get_selection_index_by_id(
+    ballot: CiphertextBallot, contest_id: str, selection_id: str
+) -> Tuple[int, int]:
+    contest_idx = get_contest_index_by_id(ballot, contest_id)
+    if contest_idx != -1:
+        # Step through ballot selections until match is found; this accommodates selections
+        # listed out of sequence order as well as contests from compact ballots
+        for j, selection in enumerate(ballot.contests[contest_idx].ballot_selections):
+            if selection.object_id == selection_id:
+                return contest_idx, j
+    return contest_idx, -1
 
 
 def get_corrupt_filenames(_cex: str) -> Tuple[str, str]:
@@ -548,6 +1096,36 @@ def corrupt_contest_and_serialize_ballot(
     )
 
 
+def corrupt_selection_and_serialize_ballot(
+    _cex: str,
+    ballot: CiphertextBallot,
+    ballot_id: str,
+    contest_idx: int,
+    selection_idx: int,
+    replacements: dict,
+    is_cipher: bool = True,
+) -> None:
+    # Imbue corruptions to copy of ciphertext or submitted ballot according
+    # to replacements dictionary, then serialize result
+    ballot_corrupt = deepcopy(ballot)
+    selection_corrupt = ballot_corrupt.contests[contest_idx].ballot_selections[
+        selection_idx
+    ]
+    for key, value in replacements.items():
+        if key == "proof":
+            selection_corrupt.proof = value
+    to_file(
+        ballot_corrupt,
+        (CIPHERTEXT_BALLOT_PREFIX if is_cipher else SUBMITTED_BALLOT_PREFIX)
+        + ballot_id,
+        path.join(
+            _cex,
+            (PRIVATE_DATA_DIR if is_cipher else ELECTION_RECORD_DIR),
+            (CIPHERTEXT_BALLOTS_DIR if is_cipher else SUBMITTED_BALLOTS_DIR),
+        ),
+    )
+
+
 def corrupt_contest_and_json_ballot(
     filename: str, contest_idx: int, replacements: dict
 ) -> None:
@@ -563,6 +1141,82 @@ def corrupt_contest_and_json_ballot(
                 json_corrupt["contests"][contest_idx]["proof"][key[6:]] = value
     with open(filename, "w", encoding="utf-8") as outfile:
         json.dump(json_corrupt, outfile)
+
+
+def corrupt_selection_and_json_ballot(
+    filename: str, contest_idx: int, selection_idx: int, replacements: dict
+) -> None:
+    # Edit JSON of ciphertext or submitted ballot according
+    # to replacements dictionary to imbue corruptions
+    # This is necessary, e.g., when we cannot construct a corrupted
+    # Chaum-Pedersen proof object with a challenge that isn't of type
+    # ElementModQ, so edits are made via JSON rather than serialization
+    with open(filename, "r", encoding="utf-8") as infile:
+        json_corrupt = json.load(infile)
+        selection = json_corrupt["contests"][contest_idx]["ballot_selections"][
+            selection_idx
+        ]
+        for key, value in replacements.items():
+            if key[:5] == "proof" or key == "challenge":
+                selection["proof"][key] = value
+    with open(filename, "w", encoding="utf-8") as outfile:
+        json.dump(json_corrupt, outfile)
+
+
+def antiverify_4(
+    _data: str,
+    context: CiphertextElectionContext,
+    ballot_id: str,
+    contest_id: str,
+    selection_id_0: str,
+    selection_id_1: str,
+) -> None:
+    """
+    For each subcheck in Verification 4, generate an election record
+    which fails only that subcheck.
+    Contest hash values are not currently re-computed.
+
+    An appropriate ballot and contest is one which is not an undervote
+    and for which there is a ciphertext ballot available.
+    """
+    seed = ElementModQ(4)
+    nonces = Nonces(seed)
+    antiverify_4_a(_data, context, ballot_id, contest_id, selection_id_0)
+    antiverify_4_b(_data, ballot_id, contest_id, selection_id_0)
+    antiverify_4_c(_data, ballot_id, contest_id, selection_id_0)
+    antiverify_4_d(_data, context, ballot_id, contest_id, selection_id_0, *nonces[0:4])
+    antiverify_4_e(_data, context, ballot_id, contest_id, selection_id_0, *nonces[5:7])
+    antiverify_4_f(_data, context, ballot_id, contest_id, selection_id_1, *nonces[7:9])
+    antiverify_4_g(_data, context, ballot_id, contest_id, selection_id_0, *nonces[9:11])
+    antiverify_4_h(
+        _data, context, ballot_id, contest_id, selection_id_1, *nonces[11:13]
+    )
+
+
+def antiverify_5(
+    _data: str,
+    manifest: Manifest,
+    context: CiphertextElectionContext,
+    ballot_id: str,
+    contest_id: str,
+) -> None:
+    """
+    For each subcheck in Verification 5, generate an election record
+    which fails only that subcheck.
+    Contest hash values are not currently re-computed.
+
+    An appropriate ballot and contest is one which is not an undervote
+    and for which there is a ciphertext ballot available.
+    """
+    seed = ElementModQ(5)
+    nonces = Nonces(seed)
+    antiverify_5_a(_data, context, ballot_id, contest_id, nonces[0])
+    antiverify_5_b(_data, context, ballot_id, contest_id, nonces[1])
+    antiverify_5_c(_data, ballot_id, contest_id)
+    antiverify_5_d(_data, context, ballot_id, contest_id)
+    antiverify_5_e(_data, ballot_id, contest_id)
+    antiverify_5_f(_data, manifest, context, ballot_id, contest_id, *nonces[2:4])
+    antiverify_5_g(_data, manifest, context, ballot_id, contest_id, *nonces[4:6])
 
 
 if __name__ == "__main__":
@@ -588,6 +1242,9 @@ if __name__ == "__main__":
     # Select ballot and contest to tweak
     ballot_id = "03a29d15-667c-4ac8-afd7-549f19b8e4eb"
     contest_id = "justice-supreme-court"
+    selection_id_0 = "benjamin-franklin-selection"
+    selection_id_1 = "john-adams-selection"
 
     # Call helper functions for example generation
+    antiverify_4(_data, context, ballot_id, contest_id, selection_id_0, selection_id_1)
     antiverify_5(_data, manifest, context, ballot_id, contest_id)
