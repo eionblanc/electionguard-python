@@ -80,7 +80,7 @@ class AllPrivateElectionData:
 class ElectionFactory:
     """Factory to create elections."""
 
-    simple_election_manifest_file_name = "election_manifest_simple.json"
+    simple_election_manifest_file_name = "1.0.0/manifest.json"
 
     def get_simple_manifest_from_file(self) -> Manifest:
         """Get simple manifest from json file."""

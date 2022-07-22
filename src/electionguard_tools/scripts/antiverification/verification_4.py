@@ -45,7 +45,7 @@ def antiverify_4(
     """
     For each subcheck in Verification 4, generate an election record
     which fails only that subcheck.
-    Contest hash values are not currently re-computed.
+    Ballot hash values are not currently re-computed.
 
     An appropriate ballot and contest is one which is not an undervote
     and for which there is a ciphertext ballot available.
@@ -81,7 +81,7 @@ def antiverify_4_a(
     and knowledge that the selection encrypts 0.
     """
     _cex = duplicate_election_data(_data, "4", "A")
-    _, ciphertext = import_ballot_from_files(_data, ballot_id)
+    _, ciphertext, _ = import_ballot_from_files(_data, ballot_id, ciphertext_data=True)
     assert isinstance(ciphertext, CiphertextBallot)
 
     # Select contest and gather relevant values from ciphertext
@@ -143,7 +143,9 @@ def antiverify_4_b(
     and knowledge that the selection encrypts 0.
     """
     _cex = duplicate_election_data(_data, "4", "B")
-    ballot, ciphertext = import_ballot_from_files(_data, ballot_id)
+    ballot, ciphertext, _ = import_ballot_from_files(
+        _data, ballot_id, ciphertext_data=True
+    )
     assert isinstance(ciphertext, CiphertextBallot)
 
     # Select contest and gather relevant values from ballot
@@ -198,7 +200,7 @@ def antiverify_4_c(
     This example requires no access to private election data.
     """
     _cex = duplicate_election_data(_data, "4", "C")
-    ballot, _ = import_ballot_from_files(_data, ballot_id, private_data=False)
+    ballot, _, _ = import_ballot_from_files(_data, ballot_id)
 
     # Select contest and gather relevant values from ballot
     contest_idx, selection_idx = get_selection_index_by_id(
@@ -240,7 +242,9 @@ def antiverify_4_d(
     and knowledge that the selection encrypts 0.
     """
     _cex = duplicate_election_data(_data, "4", "D")
-    ballot, ciphertext = import_ballot_from_files(_data, ballot_id)
+    ballot, ciphertext, _ = import_ballot_from_files(
+        _data, ballot_id, ciphertext_data=True
+    )
     assert isinstance(ciphertext, CiphertextBallot)
 
     # Select contest and gather relevant values from ciphertext
@@ -306,7 +310,9 @@ def antiverify_4_e(
     and knowledge that the selection encrypts 0.
     """
     _cex = duplicate_election_data(_data, "4", "E")
-    ballot, ciphertext = import_ballot_from_files(_data, ballot_id)
+    ballot, ciphertext, _ = import_ballot_from_files(
+        _data, ballot_id, ciphertext_data=True
+    )
     assert isinstance(ciphertext, CiphertextBallot)
 
     # Select contest and gather relevant values from ciphertext
@@ -389,7 +395,9 @@ def antiverify_4_f(
     and knowledge that the selection encrypts 1.
     """
     _cex = duplicate_election_data(_data, "4", "F")
-    ballot, ciphertext = import_ballot_from_files(_data, ballot_id)
+    ballot, ciphertext, _ = import_ballot_from_files(
+        _data, ballot_id, ciphertext_data=True
+    )
     assert isinstance(ciphertext, CiphertextBallot)
 
     # Select contest and gather relevant values from ciphertext
@@ -473,7 +481,9 @@ def antiverify_4_g(
     and knowledge that the selection encrypts 0.
     """
     _cex = duplicate_election_data(_data, "4", "G")
-    ballot, ciphertext = import_ballot_from_files(_data, ballot_id)
+    ballot, ciphertext, _ = import_ballot_from_files(
+        _data, ballot_id, ciphertext_data=True
+    )
     assert isinstance(ciphertext, CiphertextBallot)
 
     # Select contest and gather relevant values from ciphertext
@@ -555,7 +565,9 @@ def antiverify_4_h(
     and knowledge that the selection encrypts 1.
     """
     _cex = duplicate_election_data(_data, "4", "H")
-    ballot, ciphertext = import_ballot_from_files(_data, ballot_id)
+    ballot, ciphertext, _ = import_ballot_from_files(
+        _data, ballot_id, ciphertext_data=True
+    )
     assert isinstance(ciphertext, CiphertextBallot)
 
     # Select contest and gather relevant values from ciphertext

@@ -36,7 +36,7 @@ class BallotFactory:
     """Factory to create ballots"""
 
     simple_ballot_filename = "ballot_in_simple.json"
-    simple_ballots_filename = "plaintext_ballots_simple.json"
+    simple_ballots_filename = "1.0.0/plaintext_ballots_list.json"
 
     @staticmethod
     def get_random_selection_from(

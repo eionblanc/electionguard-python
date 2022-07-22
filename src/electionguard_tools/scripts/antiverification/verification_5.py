@@ -48,7 +48,7 @@ def antiverify_5(
     """
     For each subcheck in Verification 5, generate an election record
     which fails only that subcheck.
-    Contest hash values are not currently re-computed.
+    Ballot hash values are not currently re-computed.
 
     An appropriate ballot and contest is one which is not an undervote
     and for which there is a ciphertext ballot available.
@@ -82,7 +82,9 @@ def antiverify_5_a(
     affirmative votes are removed.
     """
     _cex = duplicate_election_data(_data, "5", "A")
-    ballot, ciphertext = import_ballot_from_files(_data, ballot_id)
+    ballot, ciphertext, _ = import_ballot_from_files(
+        _data, ballot_id, ciphertext_data=True
+    )
     assert isinstance(ciphertext, CiphertextBallot)
 
     # Select contest and gather relevant values from ciphertext
@@ -151,7 +153,9 @@ def antiverify_5_b(
     This example requires access to the ciphertext ballot (for the aggregate nonce).
     """
     _cex = duplicate_election_data(_data, "5", "B")
-    ballot, ciphertext = import_ballot_from_files(_data, ballot_id)
+    ballot, ciphertext, _ = import_ballot_from_files(
+        _data, ballot_id, ciphertext_data=True
+    )
     assert isinstance(ciphertext, CiphertextBallot)
 
     # Select contest and gather relevant values from ciphertext
@@ -205,7 +209,7 @@ def antiverify_5_c(_data: str, ballot_id: str, contest_id: str) -> None:
     This example requires no access to private election data.
     """
     _cex = duplicate_election_data(_data, "5", "C")
-    ballot, _ = import_ballot_from_files(_data, ballot_id, private_data=False)
+    ballot, _, _ = import_ballot_from_files(_data, ballot_id)
 
     # Select contest and gather relevant values from ballot
     contest_idx = get_contest_index_by_id(ballot, contest_id)
@@ -234,7 +238,7 @@ def antiverify_5_d(
     This example requires access to the ciphertext ballot (for the aggregate nonce).
     """
     _cex = duplicate_election_data(_data, "5", "D")
-    _, ciphertext = import_ballot_from_files(_data, ballot_id)
+    _, ciphertext, _ = import_ballot_from_files(_data, ballot_id, ciphertext_data=True)
     assert isinstance(ciphertext, CiphertextBallot)
 
     # Select contest and gather relevant values from ciphertext
@@ -281,7 +285,7 @@ def antiverify_5_e(_data: str, ballot_id: str, contest_id: str) -> None:
     This example requires no access to private election data.
     """
     _cex = duplicate_election_data(_data, "5", "E")
-    ballot, _ = import_ballot_from_files(_data, ballot_id, private_data=False)
+    ballot, _, _ = import_ballot_from_files(_data, ballot_id)
 
     # Select contest and gather relevant values from ballot
     contest_idx = get_contest_index_by_id(ballot, contest_id)
@@ -316,7 +320,9 @@ def antiverify_5_f(
     This example requires access to the ciphertext ballot (for the aggregate nonce).
     """
     _cex = duplicate_election_data(_data, "5", "F")
-    ballot, ciphertext = import_ballot_from_files(_data, ballot_id)
+    ballot, ciphertext, _ = import_ballot_from_files(
+        _data, ballot_id, ciphertext_data=True
+    )
     assert isinstance(ciphertext, CiphertextBallot)
 
     # Select contest and gather relevant values from ciphertext
@@ -386,7 +392,9 @@ def antiverify_5_g(
     This example requires access to the ciphertext ballot (for the aggregate nonce).
     """
     _cex = duplicate_election_data(_data, "5", "G")
-    ballot, ciphertext = import_ballot_from_files(_data, ballot_id)
+    ballot, ciphertext, _ = import_ballot_from_files(
+        _data, ballot_id, ciphertext_data=True
+    )
     assert isinstance(ciphertext, CiphertextBallot)
 
     # Select contest and gather relevant values from ciphertext

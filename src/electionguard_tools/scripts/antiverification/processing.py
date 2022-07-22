@@ -3,12 +3,15 @@ from os import path
 import shutil
 from copy import deepcopy
 import json
-from typing import Union, Tuple
+from typing import Tuple, Optional
 
 from electionguard.ballot import (
     CiphertextBallot,
     SubmittedBallot,
+    PlaintextBallot,
 )
+from electionguard.big_integer import BigInteger
+from electionguard.group import ElementModQ, mult_q
 from electionguard.serialize import from_file, to_file
 from electionguard_tools.helpers.export import (
     PRIVATE_DATA_DIR,
@@ -16,9 +19,11 @@ from electionguard_tools.helpers.export import (
     SUBMITTED_BALLOTS_DIR,
     CIPHERTEXT_BALLOT_PREFIX,
     SUBMITTED_BALLOT_PREFIX,
+    PLAINTEXT_BALLOT_PREFIX,
 )
 
 CIPHERTEXT_BALLOTS_DIR = "ciphertext_ballots"
+PLAINTEXT_BALLOTS_DIR = "plaintext_ballots"
 
 
 def duplicate_election_data(_data: str, check: str, subcheck: str) -> str:
@@ -31,9 +36,12 @@ def duplicate_election_data(_data: str, check: str, subcheck: str) -> str:
 
 
 def import_ballot_from_files(
-    _data: str, ballot_id: str, private_data: bool = True
-) -> Tuple[SubmittedBallot, Union[CiphertextBallot, None]]:
-    # Import ciphertext and corresponding submitted ballot to manipulate
+    _data: str,
+    ballot_id: str,
+    ciphertext_data: bool = False,
+    plaintext_data: bool = False,
+) -> Tuple[SubmittedBallot, Optional[CiphertextBallot], Optional[PlaintextBallot]]:
+    # Import submitted ballot to manipulate
     ballot = from_file(
         SubmittedBallot,
         path.join(
@@ -44,8 +52,9 @@ def import_ballot_from_files(
         ),
     )
     assert isinstance(ballot, SubmittedBallot)
-    if private_data:
-        ciphertext = from_file(
+
+    ciphertext = (
+        from_file(
             CiphertextBallot,
             path.join(
                 _data,
@@ -54,8 +63,24 @@ def import_ballot_from_files(
                 CIPHERTEXT_BALLOT_PREFIX + ballot_id + ".json",
             ),
         )
-        return ballot, ciphertext
-    return ballot, None
+        if ciphertext_data
+        else None
+    )
+    plaintext = (
+        from_file(
+            PlaintextBallot,
+            path.join(
+                _data,
+                PRIVATE_DATA_DIR,
+                PLAINTEXT_BALLOTS_DIR,
+                PLAINTEXT_BALLOT_PREFIX + ballot_id + ".json",
+            ),
+        )
+        if plaintext_data
+        else None
+    )
+
+    return ballot, ciphertext, plaintext
 
 
 def get_contest_index_by_id(ballot: CiphertextBallot, contest_id: str) -> int:
@@ -95,6 +120,26 @@ def get_corrupt_filenames(_cex: str, ballot_id: str) -> Tuple[str, str]:
         CIPHERTEXT_BALLOT_PREFIX + ballot_id + ".json",
     )
     return ballot_file_corrupt, cipher_file_corrupt
+
+
+def get_submitted_pseudonym(
+    _cex: str, ballot_id: str, nonce: ElementModQ
+) -> Tuple[str, str]:
+    fragments = [
+        [ElementModQ(BigInteger(s[4 * i : 4 * (i + 1)])) for i in range(len(s) // 4)]
+        for s in ballot_id.split("-")
+    ]
+    fake_fragments = [
+        [mult_q(nonce, f).to_hex().lower() for f in fragment] for fragment in fragments
+    ]
+    fake_id = "-".join(["".join(fragment) for fragment in fake_fragments])
+    fake_filename = path.join(
+        _cex,
+        ELECTION_RECORD_DIR,
+        SUBMITTED_BALLOTS_DIR,
+        SUBMITTED_BALLOT_PREFIX + fake_id + ".json",
+    )
+    return fake_filename, fake_id
 
 
 def corrupt_contest_and_serialize_ballot(

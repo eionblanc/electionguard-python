@@ -121,7 +121,7 @@ def cast_ballot(ballot: CiphertextBallot) -> SubmittedBallot:
 def spoil_ballot(ballot: CiphertextBallot) -> SubmittedBallot:
     """
     Convert a `CiphertextBallot` into a `SubmittedBallot`, with all nonces removed.
-    Declare a ballot as CAST.
+    Declare a ballot as SPOILED.
     """
     return submit_ballot(
         ballot,

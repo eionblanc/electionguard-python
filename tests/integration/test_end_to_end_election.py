@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 from typing import Callable, Dict, List, Union
-from os import path, remove
+from os import path, remove, environ
 from shutil import rmtree, make_archive
 from random import randint
 from dataclasses import asdict
@@ -87,6 +87,7 @@ class TestEndToEndElection(BaseTestCase):
     In a real world scenario all of these steps would not be completed on the same machine.
     """
 
+    environ.setdefault("PRIME_OPTION", "TestOnly")
     NUMBER_OF_GUARDIANS = 5
     QUORUM = 3
 
@@ -181,7 +182,6 @@ class TestEndToEndElection(BaseTestCase):
         representations of those keys with QUORUM of other Guardians.  Then, combine
         the public election keys to make a joint election key that is used to encrypt ballots.
         """
-
         # Setup Guardians
         for i in range(self.NUMBER_OF_GUARDIANS):
             self.guardians.append(
@@ -343,7 +343,7 @@ class TestEndToEndElection(BaseTestCase):
 
         # Randomly cast or spoil the ballots
         for ballot in self.ciphertext_ballots:
-            if randint(0, 1):
+            if randint(0, 2) < 2:
                 submitted_ballot = self.ballot_box.cast(ballot)
             else:
                 submitted_ballot = self.ballot_box.spoil(ballot)
@@ -357,8 +357,8 @@ class TestEndToEndElection(BaseTestCase):
     def step_4_decrypt_tally(self) -> None:
         """
         Homomorphically combine the selections made on all of the cast ballots
-        and use the Available Guardians to decrypt the combined tally.
-        In this way, no individual voter's cast ballot is ever decrypted drectly.
+        and use the available guardians to decrypt the combined tally.
+        In this way, no individual voter's cast ballot is ever decrypted directly.
         """
 
         # Generate a Homomorphically Accumulated Tally of the ballots
