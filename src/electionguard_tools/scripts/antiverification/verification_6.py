@@ -75,6 +75,7 @@ def antiverify_6_b(
     (contributed by the original cast ballot) and adjust the partial
     decryption shares and tally accordingly.
     Finally, we publish the ballot spoil.
+    No ballot hashes need to be updated.
 
     This example requires access to private election data for the ciphertext
     and plaintext ballots as well as the secret guardian keys for decryption.

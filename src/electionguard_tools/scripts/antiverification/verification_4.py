@@ -45,7 +45,7 @@ def antiverify_4(
     """
     For each subcheck in Verification 4, generate an election record
     which fails only that subcheck.
-    Ballot hash values are not currently re-computed.
+    No selection ciphertexts are edited, and thus ballot hashes are unchanged.
 
     An appropriate ballot and contest is one which is not an undervote
     and for which there is a ciphertext ballot available.

@@ -48,7 +48,8 @@ def antiverify_5(
     """
     For each subcheck in Verification 5, generate an election record
     which fails only that subcheck.
-    Ballot hash values are not currently re-computed.
+    Ballot hash values are recomputed in (5.A); otherwise, they do not
+    need to be updated.
 
     An appropriate ballot and contest is one which is not an undervote
     and for which there is a ciphertext ballot available.
@@ -76,6 +77,7 @@ def antiverify_5_a(
     To this end, we delete a placeholder selection that did not have
     an affirmative vote, then recompute the contest accumulation and
     Chaum-Pedersen proof.
+    This changes the contest hash and thus the ballot hash and code.
 
     This example requires access to private election data (or at least
     knowledge that a particular vote is not an undervote) to ensure no

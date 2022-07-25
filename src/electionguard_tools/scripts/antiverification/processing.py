@@ -7,6 +7,8 @@ from typing import Tuple, Optional, Dict, Union
 
 from electionguard.ballot import (
     CiphertextBallot,
+    CiphertextBallotContest,
+    CiphertextBallotSelection,
     SubmittedBallot,
     PlaintextBallot,
 )
@@ -18,6 +20,8 @@ from electionguard.decryption import (
 )
 from electionguard.decrypt_with_shares import decrypt_ballot
 from electionguard.election import CiphertextElectionContext
+from electionguard.election_object_base import sequence_order_sort
+from electionguard.elgamal import ElGamalCiphertext
 from electionguard.group import (
     ElementModP,
     ElementModQ,
@@ -27,6 +31,7 @@ from electionguard.group import (
     mult_q,
 )
 from electionguard.guardian import PrivateGuardianRecord, GuardianId, Guardian
+from electionguard.hash import hash_elems
 from electionguard.manifest import Manifest
 from electionguard.serialize import from_file, to_file
 from electionguard.tally import (
@@ -217,15 +222,20 @@ def corrupt_contest_and_serialize_ballot(
     # to replacements dictionary, then serialize result
     ballot_corrupt = deepcopy(ballot)
     contest_corrupt = ballot_corrupt.contests[contest_idx]
+    update_hash = False
     for key, value in replacements.items():
         if key == "ballot_selections":
             contest_corrupt.ballot_selections = value
+            update_hash = True
         elif key == "ciphertext_accumulation":
             contest_corrupt.ciphertext_accumulation = value
         elif key == "nonce" and is_cipher:
             contest_corrupt.nonce = value
         elif key == "proof":
             contest_corrupt.proof = value
+    if update_hash:
+        update_contest_hash(contest_corrupt)
+        update_ballot_hash_and_code(ballot_corrupt)
     to_file(
         ballot_corrupt,
         (CIPHERTEXT_BALLOT_PREFIX if is_cipher else SUBMITTED_BALLOT_PREFIX)
@@ -266,6 +276,84 @@ def corrupt_selection_and_serialize_ballot(
             (CIPHERTEXT_BALLOTS_DIR if is_cipher else SUBMITTED_BALLOTS_DIR),
         ),
     )
+
+
+def update_ballot_hash_and_code(ballot: CiphertextBallot) -> None:
+    # Beware of ballot chaining: if a ballot's code changes, the code_seed of
+    # the subsequent ballot should reflect this
+    # Update ballot hash
+    contest_hashes = [
+        contest.crypto_hash for contest in sequence_order_sort(ballot.contests)
+    ]
+    crypto_hash = hash_elems(ballot.object_id, ballot.manifest_hash, *contest_hashes)
+    ballot.crypto_hash = crypto_hash
+    # Update ballot code
+    code = hash_elems(ballot.code_seed, ballot.timestamp, crypto_hash)
+    ballot.code = code
+
+
+def update_contest_hash(
+    contest: CiphertextBallotContest,
+) -> None:
+    selection_hashes = [
+        selection.crypto_hash
+        for selection in sequence_order_sort(contest.ballot_selections)
+    ]
+    crypto_hash = hash_elems(
+        contest.object_id, contest.description_hash, *selection_hashes
+    )
+    contest.crypto_hash = crypto_hash
+
+
+def update_selection_hash(
+    selection: CiphertextBallotSelection,
+) -> None:
+    crypto_hash = hash_elems(
+        selection.object_id,
+        selection.description_hash,
+        selection.ciphertext.crypto_hash(),
+    )
+    selection.crypto_hash = crypto_hash
+
+
+def update_ballot_hash_and_code_json(ballot: Dict) -> None:
+    # Beware of ballot chaining: if a ballot's code changes, the code_seed of
+    # the subsequent ballot should reflect this
+    # Update ballot hash
+    contest_hashes = [
+        contest["crypto_hash"] for contest in sequence_order_sort(ballot["contests"])
+    ]
+    crypto_hash = hash_elems(
+        ballot["object_id"], ballot["manifest_hash"], *contest_hashes
+    )
+    ballot["crypto_hash"] = crypto_hash
+    # Update ballot code
+    code = hash_elems(ballot["code_seed"], ballot["timestamp"], crypto_hash)
+    ballot["code"] = code
+
+
+def update_contest_hash_json(contest: Dict) -> None:
+    selection_hashes = [
+        selection["crypto_hash"]
+        for selection in sequence_order_sort(contest["ballot_selections"])
+    ]
+    crypto_hash = hash_elems(
+        contest["object_id"], contest["description_hash"], *selection_hashes
+    )
+    contest["crypto_hash"] = crypto_hash
+
+
+def update_selection_hash_json(
+    selection: Dict,
+) -> None:
+    crypto_hash = hash_elems(
+        selection["object_id"],
+        ElementModQ(selection["description_hash"]),
+        ElGamalCiphertext(
+            selection["ciphertext"]["pad"], selection["ciphertext"]["data"]
+        ).crypto_hash(),
+    )
+    selection["crypto_hash"] = crypto_hash
 
 
 def corrupt_contest_and_json_ballot(
