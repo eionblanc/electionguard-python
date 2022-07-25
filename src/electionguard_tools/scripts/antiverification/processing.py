@@ -1,9 +1,9 @@
 #!/usr/bin/env python
-from os import path
+from os import path, listdir
 import shutil
 from copy import deepcopy
 import json
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Dict, Union
 
 from electionguard.ballot import (
     CiphertextBallot,
@@ -11,15 +11,38 @@ from electionguard.ballot import (
     PlaintextBallot,
 )
 from electionguard.big_integer import BigInteger
-from electionguard.group import ElementModQ, mult_q
+from electionguard.chaum_pedersen import make_chaum_pedersen
+from electionguard.decryption import (
+    DecryptionShare,
+    compute_decryption_share_for_ballot,
+)
+from electionguard.decrypt_with_shares import decrypt_ballot
+from electionguard.election import CiphertextElectionContext
+from electionguard.group import (
+    ElementModP,
+    ElementModQ,
+    g_pow_p,
+    pow_p,
+    mult_p,
+    mult_q,
+)
+from electionguard.guardian import PrivateGuardianRecord, GuardianId, Guardian
+from electionguard.manifest import Manifest
 from electionguard.serialize import from_file, to_file
+from electionguard.tally import (
+    PlaintextTally,
+    PublishedCiphertextTally,
+    PlaintextTallySelection,
+)
 from electionguard_tools.helpers.export import (
     PRIVATE_DATA_DIR,
     ELECTION_RECORD_DIR,
     SUBMITTED_BALLOTS_DIR,
+    SPOILED_BALLOTS_DIR,
     CIPHERTEXT_BALLOT_PREFIX,
     SUBMITTED_BALLOT_PREFIX,
     PLAINTEXT_BALLOT_PREFIX,
+    SPOILED_BALLOT_PREFIX,
 )
 
 CIPHERTEXT_BALLOTS_DIR = "ciphertext_ballots"
@@ -79,11 +102,46 @@ def import_ballot_from_files(
         if plaintext_data
         else None
     )
-
     return ballot, ciphertext, plaintext
 
 
-def get_contest_index_by_id(ballot: CiphertextBallot, contest_id: str) -> int:
+def import_private_guardian_data(
+    _data: str,
+    context: CiphertextElectionContext,
+    ballot_for_shares: SubmittedBallot = None,
+) -> Tuple[
+    Dict[GuardianId, PrivateGuardianRecord],
+    Dict[GuardianId, Guardian],
+    Dict[GuardianId, DecryptionShare],
+]:
+    private_guardian_directory = path.join(_data, PRIVATE_DATA_DIR, "private_guardians")
+    private_records: Dict[GuardianId, PrivateGuardianRecord] = {}
+    guardians: Dict[GuardianId, Guardian] = {}
+    shares: Dict[GuardianId, DecryptionShare] = {}
+    for filename in listdir(private_guardian_directory):
+        private_record = from_file(
+            PrivateGuardianRecord, path.join(private_guardian_directory, filename)
+        )
+        private_records[private_record.guardian_id] = private_record
+        guardians[private_record.guardian_id] = Guardian.from_private_record(
+            private_record,
+            context.number_of_guardians,
+            context.quorum,
+        )
+        if ballot_for_shares:
+            guardian_ballot_share = compute_decryption_share_for_ballot(
+                private_record.election_keys,
+                ballot_for_shares,
+                context,
+            )
+            if guardian_ballot_share:
+                shares[private_record.guardian_id] = guardian_ballot_share
+    return private_records, guardians, shares
+
+
+def get_contest_index_by_id(
+    ballot: Union[CiphertextBallot, PlaintextBallot], contest_id: str
+) -> int:
     # Step through contests until match is found; this accommodates contests
     # listed out of sequence order as well as contests from compact ballots
     for j, contest in enumerate(ballot.contests):
@@ -93,9 +151,14 @@ def get_contest_index_by_id(ballot: CiphertextBallot, contest_id: str) -> int:
 
 
 def get_selection_index_by_id(
-    ballot: CiphertextBallot, contest_id: str, selection_id: str
+    ballot: Union[CiphertextBallot, PlaintextBallot],
+    contest_id: Union[str, int],
+    selection_id: str,
 ) -> Tuple[int, int]:
-    contest_idx = get_contest_index_by_id(ballot, contest_id)
+    if isinstance(contest_id, str):
+        contest_idx = get_contest_index_by_id(ballot, contest_id)
+    else:
+        contest_idx = contest_id
     if contest_idx != -1:
         # Step through ballot selections until match is found; this accommodates selections
         # listed out of sequence order as well as contests from compact ballots
@@ -240,3 +303,72 @@ def corrupt_selection_and_json_ballot(
                 selection["proof"][key] = value
     with open(filename, "w", encoding="utf-8") as outfile:
         json.dump(json_corrupt, outfile)
+
+
+def corrupt_selection_accumulation(
+    ciphertext_tally: PublishedCiphertextTally,
+    contest_id: str,
+    selection_id: str,
+    pad_factor: ElementModP,
+    data_factor: ElementModP,
+) -> None:
+    acc_ciphertext = (
+        ciphertext_tally.contests[contest_id].selections[selection_id].ciphertext
+    )
+    acc_ciphertext.pad = mult_p(acc_ciphertext.pad, pad_factor)
+    acc_ciphertext.data = mult_p(acc_ciphertext.data, data_factor)
+
+
+def edit_and_prove_shares(
+    context: CiphertextElectionContext,
+    selection_tally: PlaintextTallySelection,
+    private_records: Dict[GuardianId, PrivateGuardianRecord],
+    guardians: Dict[GuardianId, Guardian],
+    public_key_power: ElementModQ,
+    nonce: ElementModQ,
+) -> None:
+    for share in selection_tally.shares:
+        guardian = guardians[share.guardian_id]
+        assert isinstance(guardian.share_key().key, ElementModP)
+        share.share = mult_p(
+            share.share, pow_p(guardian.share_key().key, public_key_power)
+        )
+        share.proof = make_chaum_pedersen(
+            selection_tally.message,
+            private_records[share.guardian_id].election_keys.key_pair.secret_key,
+            share.share,
+            nonce,
+            context.crypto_extended_base_hash,
+        )
+
+
+def add_plaintext_vote(
+    selection_tally: PlaintextTallySelection,
+    vote: int,
+) -> None:
+    selection_tally.tally = selection_tally.tally + vote
+    selection_tally.value = mult_p(selection_tally.value, g_pow_p(vote))
+
+
+def spoil_ballot(
+    _data: str,
+    manifest: Manifest,
+    context: CiphertextElectionContext,
+    ballot: SubmittedBallot,
+    shares: Dict[GuardianId, DecryptionShare],
+    spoiled_suffix: str = None,
+) -> Optional[PlaintextTally]:
+    spoiled_ballot = decrypt_ballot(
+        ballot,
+        shares,
+        context.crypto_extended_base_hash,
+        manifest,
+    )
+    if not spoiled_suffix:
+        spoiled_suffix = ballot.object_id
+    to_file(
+        spoiled_ballot,
+        SPOILED_BALLOT_PREFIX + spoiled_suffix,
+        path.join(_data, ELECTION_RECORD_DIR, SPOILED_BALLOTS_DIR),
+    )
+    return spoiled_ballot
