@@ -46,4 +46,12 @@ if __name__ == "__main__":
     antiverify_5(_data, manifest, context, ballot_id, contest_id)
 
     ballot_id_cast = "1048ce32-f1b1-4b05-b7fb-8c615ac842ee"
-    antiverify_6(_data, manifest, context, ballot_id_cast)
+    antiverify_6(
+        _data,
+        manifest,
+        context,
+        ballot_id_cast,
+        contest_id,
+        selection_id_0,
+        selection_id_1,
+    )

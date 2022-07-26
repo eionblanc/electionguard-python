@@ -197,5 +197,5 @@ def decrypt_selection_with_decryption_shares(
         d_log,
         decrypted_value,
         selection.ciphertext,
-        [share for (guardian_id, (public_key, share)) in shares.items()],
+        [decryption for (_, decryption) in shares.values()],
     )

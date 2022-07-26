@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 from os import path
+from copy import deepcopy
 
 from electionguard.ballot import (
     CiphertextBallot,
@@ -12,6 +13,8 @@ from electionguard.ballot_box import BallotBoxState
 from electionguard.election import CiphertextElectionContext
 from electionguard.group import (
     ElementModQ,
+    a_minus_b_q,
+    mult_p,
     div_p,
     mult_inv_p,
     negate_q,
@@ -46,6 +49,9 @@ def antiverify_6(
     manifest: Manifest,
     context: CiphertextElectionContext,
     ballot_id: str,
+    contest_id: str,
+    selection_id_0: str,
+    selection_id_1: str,
 ) -> None:
     """
     For each subcheck in Verification 6, generate an election record
@@ -57,7 +63,125 @@ def antiverify_6(
     """
     seed = ElementModQ(6)
     nonces = Nonces(seed)
+    antiverify_6_a(
+        _data, context, ballot_id, contest_id, selection_id_0, selection_id_1
+    )
     antiverify_6_b(_data, manifest, context, ballot_id, nonces[0])
+
+
+def antiverify_6_a(
+    _data: str,
+    context: CiphertextElectionContext,
+    ballot_id: str,
+    contest_id: str,
+    selection_id_0: str,
+    selection_id_1: str,
+) -> None:
+    """
+    Generate an election record which fails only Verification (6.A).
+    To this end, we switch votes between two selections on a particular
+    cast ballot and contest. We do not update the selection (or contest
+    or ballot) hashes, so the resulting ballot fails (6.A). To satisfy
+    the remaining checks, we update the accumulation ciphertext,
+    partial decryption shares, and plaintext tally.
+
+    This example uses access to private election data for the ciphertext
+    and plaintext ballots. Simpler examples could be constructed
+    solely with public data.
+    """
+    # Intake ballot to have votes swapped
+    _cex = duplicate_election_data(_data, "6", "A")
+    ballot, ciphertext, _ = import_ballot_from_files(
+        _cex,
+        ballot_id,
+        ciphertext_data=True,
+    )
+    assert isinstance(ciphertext, CiphertextBallot)
+
+    ballot_corrupt = deepcopy(ballot)
+    contest_idx, selection_idx_0 = get_selection_index_by_id(
+        ballot_corrupt, contest_id, selection_id_0
+    )
+    _, selection_idx_1 = get_selection_index_by_id(
+        ballot_corrupt, contest_id, selection_id_1
+    )
+    corrupt_selections = [
+        ballot_corrupt.contests[contest_idx].ballot_selections[selection_idx_0],
+        ballot_corrupt.contests[contest_idx].ballot_selections[selection_idx_1],
+    ]
+    true_selections = [
+        ciphertext.contests[contest_idx].ballot_selections[selection_idx_0],
+        ciphertext.contests[contest_idx].ballot_selections[selection_idx_1],
+    ]
+
+    # Swap selection ciphertexts, nonces, and proofs among selections in contest
+    for j, selection in enumerate(corrupt_selections):
+        selection.ciphertext = true_selections[1 - j].ciphertext
+        selection.proof = true_selections[1 - j].proof
+
+    # Corrupted selections now encode opposite of variable name suffix
+    to_file(
+        ballot_corrupt,
+        SUBMITTED_BALLOT_PREFIX + ballot_id,
+        path.join(_cex, ELECTION_RECORD_DIR, SUBMITTED_BALLOTS_DIR),
+    )
+
+    ciphertext_tally = from_file(
+        PublishedCiphertextTally,
+        path.join(_cex, ELECTION_RECORD_DIR, ENCRYPTED_TALLY_FILE_NAME + ".json"),
+    )
+    private_records, guardians, _ = import_private_guardian_data(_cex, context)
+    tally = from_file(
+        PlaintextTally, path.join(_cex, ELECTION_RECORD_DIR, TALLY_FILE_NAME + ".json")
+    )
+    selection_ids = [selection_id_0, selection_id_1]
+    for x in [0, 1]:
+        y = 1 - x
+        # Adjust accumulation
+        corrupt_selection_accumulation(
+            ciphertext_tally,
+            contest_id,
+            selection_ids[x],
+            mult_p(
+                true_selections[y].ciphertext.pad,
+                mult_inv_p(true_selections[x].ciphertext.pad),
+            ),
+            mult_p(
+                true_selections[y].ciphertext.data,
+                mult_inv_p(true_selections[x].ciphertext.data),
+            ),
+        )
+        # Adjust partial decryption shares
+        selection_tally = tally.contests[contest_id].selections[selection_ids[x]]
+        # Edit ciphertext messages
+        selection_tally.message.pad = mult_p(
+            selection_tally.message.pad,
+            true_selections[y].ciphertext.pad,
+            mult_inv_p(true_selections[x].ciphertext.pad),
+        )
+        selection_tally.message.data = mult_p(
+            selection_tally.message.data,
+            true_selections[y].ciphertext.data,
+            mult_inv_p(true_selections[x].ciphertext.data),
+        )
+        # Edit shares and reconstruct proofs
+        edit_and_prove_shares(
+            context,
+            selection_tally,
+            private_records,
+            guardians,
+            a_minus_b_q(true_selections[y].nonce, true_selections[x].nonce),
+            true_selections[x].nonce,
+        )
+        # Edit actual tally count
+        add_plaintext_vote(selection_tally, y - x)
+
+    to_file(
+        ciphertext_tally,
+        ENCRYPTED_TALLY_FILE_NAME,
+        path.join(_cex, ELECTION_RECORD_DIR),
+    )
+    to_file(tally, TALLY_FILE_NAME, path.join(_cex, ELECTION_RECORD_DIR))
 
 
 def antiverify_6_b(

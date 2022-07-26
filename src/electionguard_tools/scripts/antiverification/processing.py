@@ -3,7 +3,7 @@ from os import path, listdir
 import shutil
 from copy import deepcopy
 import json
-from typing import Tuple, Optional, Dict, Union
+from typing import Any, Tuple, Optional, Dict, Union
 
 from electionguard.ballot import (
     CiphertextBallot,
@@ -215,7 +215,7 @@ def corrupt_contest_and_serialize_ballot(
     ballot: CiphertextBallot,
     ballot_id: str,
     contest_idx: int,
-    replacements: dict,
+    replacements: Dict[str, Any],
     is_cipher: bool = True,
 ) -> None:
     # Imbue corruptions to copy of ciphertext or submitted ballot according
@@ -254,7 +254,7 @@ def corrupt_selection_and_serialize_ballot(
     ballot_id: str,
     contest_idx: int,
     selection_idx: int,
-    replacements: dict,
+    replacements: Dict[str, Any],
     is_cipher: bool = True,
 ) -> None:
     # Imbue corruptions to copy of ciphertext or submitted ballot according
@@ -357,7 +357,9 @@ def update_selection_hash_json(
 
 
 def corrupt_contest_and_json_ballot(
-    filename: str, contest_idx: int, replacements: dict
+    filename: str,
+    contest_idx: int,
+    replacements: Dict[str, Any],
 ) -> None:
     # Edit JSON of ciphertext or submitted ballot according
     # to replacements dictionary to imbue corruptions
@@ -374,7 +376,10 @@ def corrupt_contest_and_json_ballot(
 
 
 def corrupt_selection_and_json_ballot(
-    filename: str, contest_idx: int, selection_idx: int, replacements: dict
+    filename: str,
+    contest_idx: int,
+    selection_idx: int,
+    replacements: Dict[str, Any],
 ) -> None:
     # Edit JSON of ciphertext or submitted ballot according
     # to replacements dictionary to imbue corruptions
