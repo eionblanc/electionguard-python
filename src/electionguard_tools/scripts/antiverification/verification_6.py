@@ -15,7 +15,6 @@ from electionguard.group import (
     ElementModQ,
     a_minus_b_q,
     mult_p,
-    div_p,
     mult_inv_p,
     negate_q,
 )
@@ -56,7 +55,7 @@ def antiverify_6(
     """
     For each subcheck in Verification 6, generate an election record
     which fails only that subcheck.
-    Ballot hash values are not currently re-computed.
+    No ballot hashes need to be updated.
 
     An appropriate ballot and contest is one which is not an undervote
     and for which there is a ciphertext ballot available.
@@ -119,7 +118,7 @@ def antiverify_6_a(
         selection.ciphertext = true_selections[1 - j].ciphertext
         selection.proof = true_selections[1 - j].proof
 
-    # Corrupted selections now encode opposite of variable name suffix
+    # Corrupted selections now encode the binary opposite
     to_file(
         ballot_corrupt,
         SUBMITTED_BALLOT_PREFIX + ballot_id,
@@ -137,9 +136,9 @@ def antiverify_6_a(
     selection_ids = [selection_id_0, selection_id_1]
     for x in [0, 1]:
         y = 1 - x
-        # Adjust accumulation
+        # Adjust accumulation ciphertext in encrypted and decrypted tallies
         corrupt_selection_accumulation(
-            ciphertext_tally,
+            [ciphertext_tally, tally],
             contest_id,
             selection_ids[x],
             mult_p(
@@ -153,18 +152,6 @@ def antiverify_6_a(
         )
         # Adjust partial decryption shares
         selection_tally = tally.contests[contest_id].selections[selection_ids[x]]
-        # Edit ciphertext messages
-        selection_tally.message.pad = mult_p(
-            selection_tally.message.pad,
-            true_selections[y].ciphertext.pad,
-            mult_inv_p(true_selections[x].ciphertext.pad),
-        )
-        selection_tally.message.data = mult_p(
-            selection_tally.message.data,
-            true_selections[y].ciphertext.data,
-            mult_inv_p(true_selections[x].ciphertext.data),
-        )
-        # Edit shares and reconstruct proofs
         edit_and_prove_shares(
             context,
             selection_tally,
@@ -199,7 +186,6 @@ def antiverify_6_b(
     (contributed by the original cast ballot) and adjust the partial
     decryption shares and tally accordingly.
     Finally, we publish the ballot spoil.
-    No ballot hashes need to be updated.
 
     This example requires access to private election data for the ciphertext
     and plaintext ballots as well as the secret guardian keys for decryption.
@@ -240,13 +226,16 @@ def antiverify_6_b(
         PublishedCiphertextTally,
         path.join(_cex, ELECTION_RECORD_DIR, ENCRYPTED_TALLY_FILE_NAME + ".json"),
     )
+    tally = from_file(
+        PlaintextTally, path.join(_cex, ELECTION_RECORD_DIR, TALLY_FILE_NAME + ".json")
+    )
     for contest in ballot.contests:
         for selection in contest.ballot_selections:
             if not selection.is_placeholder_selection:
                 # With published spoil, both the cast ballot and its spoiled duplicate
                 # will be considered spoiled and thus left uncounted
                 corrupt_selection_accumulation(
-                    ciphertext_tally,
+                    [ciphertext_tally, tally],
                     contest.object_id,
                     selection.object_id,
                     mult_inv_p(selection.ciphertext.pad),
@@ -277,9 +266,6 @@ def antiverify_6_b(
 
     # Edit plaintext tally
     # Iterate through contests > selections > shares from tally.json, dividing by duplicate ballot
-    tally = from_file(
-        PlaintextTally, path.join(_cex, ELECTION_RECORD_DIR, TALLY_FILE_NAME + ".json")
-    )
     for contest in ciphertext.contests:
         pt_contest_idx = get_contest_index_by_id(plaintext, contest.object_id)
         pt_contest = plaintext.contests[pt_contest_idx]
@@ -288,13 +274,6 @@ def antiverify_6_b(
                 selection_tally = tally.contests[contest.object_id].selections[
                     selection.object_id
                 ]
-                # Edit ciphertext message
-                selection_tally.message.pad = div_p(
-                    selection_tally.message.pad, selection.ciphertext.pad
-                )
-                selection_tally.message.data = div_p(
-                    selection_tally.message.data, selection.ciphertext.data
-                )
                 # Edit shares and reconstruct proofs
                 edit_and_prove_shares(
                     context,

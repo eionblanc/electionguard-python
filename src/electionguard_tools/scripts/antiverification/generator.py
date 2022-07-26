@@ -13,6 +13,7 @@ from electionguard_tools.helpers.export import (
 from electionguard_tools.scripts.antiverification.verification_4 import antiverify_4
 from electionguard_tools.scripts.antiverification.verification_5 import antiverify_5
 from electionguard_tools.scripts.antiverification.verification_6 import antiverify_6
+from electionguard_tools.scripts.antiverification.verification_7 import antiverify_7
 
 
 if __name__ == "__main__":
@@ -55,3 +56,5 @@ if __name__ == "__main__":
         selection_id_0,
         selection_id_1,
     )
+
+    antiverify_7(_data, context, contest_id, selection_id_0)

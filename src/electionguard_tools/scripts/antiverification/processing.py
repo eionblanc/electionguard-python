@@ -3,7 +3,7 @@ from os import path, listdir
 import shutil
 from copy import deepcopy
 import json
-from typing import Any, Tuple, Optional, Dict, Union
+from typing import Any, List, Tuple, Optional, Dict, Union
 
 from electionguard.ballot import (
     CiphertextBallot,
@@ -25,6 +25,8 @@ from electionguard.elgamal import ElGamalCiphertext
 from electionguard.group import (
     ElementModP,
     ElementModQ,
+    ElementModQorInt,
+    add_q,
     g_pow_p,
     pow_p,
     mult_p,
@@ -35,6 +37,7 @@ from electionguard.hash import hash_elems
 from electionguard.manifest import Manifest
 from electionguard.serialize import from_file, to_file
 from electionguard.tally import (
+    CiphertextTallySelection,
     PlaintextTally,
     PublishedCiphertextTally,
     PlaintextTallySelection,
@@ -399,17 +402,21 @@ def corrupt_selection_and_json_ballot(
 
 
 def corrupt_selection_accumulation(
-    ciphertext_tally: PublishedCiphertextTally,
+    tallies: List[Union[PublishedCiphertextTally, PlaintextTally]],
     contest_id: str,
     selection_id: str,
     pad_factor: ElementModP,
     data_factor: ElementModP,
 ) -> None:
-    acc_ciphertext = (
-        ciphertext_tally.contests[contest_id].selections[selection_id].ciphertext
-    )
-    acc_ciphertext.pad = mult_p(acc_ciphertext.pad, pad_factor)
-    acc_ciphertext.data = mult_p(acc_ciphertext.data, data_factor)
+    for tally in tallies:
+        selection = tally.contests[contest_id].selections[selection_id]
+        if isinstance(selection, CiphertextTallySelection):
+            accumulation = selection.ciphertext
+        else:
+            accumulation = selection.message
+        assert isinstance(accumulation, ElGamalCiphertext)
+        accumulation.pad = mult_p(accumulation.pad, pad_factor)
+        accumulation.data = mult_p(accumulation.data, data_factor)
 
 
 def edit_and_prove_shares(
@@ -436,11 +443,14 @@ def edit_and_prove_shares(
 
 
 def add_plaintext_vote(
-    selection_tally: PlaintextTallySelection,
-    vote: int,
+    selection: PlaintextTallySelection,
+    vote: ElementModQorInt,
 ) -> None:
-    selection_tally.tally = selection_tally.tally + vote
-    selection_tally.value = mult_p(selection_tally.value, g_pow_p(vote))
+    if isinstance(vote, int):
+        selection.tally = selection.tally + vote
+    else:
+        selection.tally = int(add_q(ElementModQ(selection.tally), vote))
+    selection.value = mult_p(selection.value, g_pow_p(vote))
 
 
 def spoil_ballot(
