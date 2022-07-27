@@ -51,6 +51,7 @@ from electionguard_tools.helpers.export import (
     SUBMITTED_BALLOT_PREFIX,
     PLAINTEXT_BALLOT_PREFIX,
     SPOILED_BALLOT_PREFIX,
+    TALLY_FILE_NAME,
 )
 
 CIPHERTEXT_BALLOTS_DIR = "ciphertext_ballots"
@@ -176,6 +177,20 @@ def get_selection_index_by_id(
     return contest_idx, -1
 
 
+def get_share_index_by_id(
+    tally: PlaintextTally,
+    contest_id: str,
+    selection_id: str,
+    guardian_id: GuardianId,
+) -> int:
+    for j, share in enumerate(
+        tally.contests[contest_id].selections[selection_id].shares
+    ):
+        if share.guardian_id == guardian_id:
+            return j
+    return -1
+
+
 def get_corrupt_filenames(_cex: str, ballot_id: str) -> Tuple[str, str]:
     # Generate filenames for JSON-editing the submitted and ciphertext ballot
     ballot_file_corrupt = path.join(
@@ -211,6 +226,28 @@ def get_submitted_pseudonym(
         SUBMITTED_BALLOT_PREFIX + fake_id + ".json",
     )
     return fake_filename, fake_id
+
+
+def corrupt_share_and_serialize_tally(
+    _cex: str,
+    tally: PlaintextTally,
+    contest_id: str,
+    selection_id: str,
+    share_idx: int,
+    replacements: Dict[str, Any],
+) -> None:
+    # Imbue corruptions to copy of plaintext tally according
+    # to replacements dictionary, then serialize result
+    tally_corrupt = deepcopy(tally)
+    share = (
+        tally_corrupt.contests[contest_id].selections[selection_id].shares[share_idx]
+    )
+    for key, value in replacements.items():
+        if key == "proof":
+            share.proof = value
+        elif key == "share":
+            share.share = value
+    to_file(tally_corrupt, TALLY_FILE_NAME, path.join(_cex, ELECTION_RECORD_DIR))
 
 
 def corrupt_contest_and_serialize_ballot(
@@ -357,6 +394,29 @@ def update_selection_hash_json(
         ).crypto_hash(),
     )
     selection["crypto_hash"] = crypto_hash
+
+
+def corrupt_share_and_json_tally(
+    filename: str,
+    contest_id: str,
+    selection_id: str,
+    share_idx: int,
+    replacements: Dict[str, Any],
+) -> None:
+    # Edit JSON of plaintext tally according to replacements
+    # dictionary to imbue corruptions
+    # This is necessary, e.g., when we cannot construct a corrupted
+    # Chaum-Pedersen proof object with a challenge that isn't of type
+    # ElementModQ, so edits are made via JSON rather than serialization
+    with open(filename, "r", encoding="utf-8") as infile:
+        json_corrupt = json.load(infile)
+        for key, value in replacements.items():
+            if key[:5] == "proof":
+                json_corrupt["contests"][contest_id]["selections"][selection_id][
+                    "shares"
+                ][share_idx]["proof"][key[6:]] = value
+    with open(filename, "w", encoding="utf-8") as outfile:
+        json.dump(json_corrupt, outfile)
 
 
 def corrupt_contest_and_json_ballot(
