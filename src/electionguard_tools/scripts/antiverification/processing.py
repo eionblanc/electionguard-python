@@ -138,6 +138,8 @@ def import_private_guardian_data(
             context.quorum,
         )
         if ballot_for_shares:
+            # The Chaum-Pedersen proofs composing the shares bear random nonces
+            # and will change with each run
             guardian_ballot_share = compute_decryption_share_for_ballot(
                 private_record.election_keys,
                 ballot_for_shares,

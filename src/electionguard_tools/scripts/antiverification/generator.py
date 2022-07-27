@@ -16,6 +16,7 @@ from electionguard_tools.scripts.antiverification.verification_5 import antiveri
 from electionguard_tools.scripts.antiverification.verification_6 import antiverify_6
 from electionguard_tools.scripts.antiverification.verification_7 import antiverify_7
 from electionguard_tools.scripts.antiverification.verification_8 import antiverify_8
+from electionguard_tools.scripts.antiverification.verification_11 import antiverify_11
 
 
 if __name__ == "__main__":
@@ -63,3 +64,4 @@ if __name__ == "__main__":
 
     guardian_id = GuardianId("2")
     antiverify_8(_data, context, contest_id, selection_id_0, guardian_id)
+    antiverify_11(_data, contest_id, selection_id_0)
