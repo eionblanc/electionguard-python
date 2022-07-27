@@ -5,7 +5,10 @@ from os import path
 from electionguard.serialize import from_file, to_file
 from electionguard.tally import PlaintextTally
 from electionguard_tools.helpers.export import ELECTION_RECORD_DIR, TALLY_FILE_NAME
-from electionguard_tools.scripts.antiverification.processing import add_plaintext_vote, duplicate_election_data, get_share_index_by_id
+from electionguard_tools.scripts.antiverification.processing import (
+    add_plaintext_vote,
+    duplicate_election_data,
+)
 
 
 def antiverify_11(
@@ -23,7 +26,9 @@ def antiverify_11(
 
 
 def antiverify_11_a(
-    _data: str, contest_id: str, selection_id: str,
+    _data: str,
+    contest_id: str,
+    selection_id: str,
 ) -> None:
     """
     Generate an election record which fails only Verification (11.A).
@@ -46,7 +51,9 @@ def antiverify_11_a(
 
 
 def antiverify_11_b(
-    _data: str, contest_id: str, selection_id: str,
+    _data: str,
+    contest_id: str,
+    selection_id: str,
 ) -> None:
     """
     Generate an election record which fails only Verification (11.B).
@@ -66,3 +73,27 @@ def antiverify_11_b(
     # Override plaintext tally
     to_file(tally, TALLY_FILE_NAME, path.join(_cex, ELECTION_RECORD_DIR))
 
+
+def antiverify_11_c(
+    _data: str,
+    contest_id: str,
+) -> None:
+    """
+    Generate an election record which fails only Verification (11.C).
+    To this end, we duplicate a plaintext tally contest under a pseudonym.
+
+    This example requires no access to private election data.
+    """
+    _cex = duplicate_election_data(_data, "11", "C")
+    tally = from_file(
+        PlaintextTally, path.join(_cex, ELECTION_RECORD_DIR, TALLY_FILE_NAME + ".json")
+    )
+    contest = tally.contests[contest_id]
+
+    # Recompute values
+    duplicate = deepcopy(contest)
+    duplicate.object_id = "pseudo-" + duplicate.object_id
+    tally.contests[duplicate.object_id] = duplicate
+
+    # Override plaintext tally
+    to_file(tally, TALLY_FILE_NAME, path.join(_cex, ELECTION_RECORD_DIR))
