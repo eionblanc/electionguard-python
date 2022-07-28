@@ -1,8 +1,8 @@
 #!/usr/bin/env python
-from os import listdir, path
+from os import listdir, path, remove
 from typing import Iterable
 
-from electionguard.ballot import CiphertextBallot
+from electionguard.ballot import BallotBoxState, CiphertextBallot, SubmittedBallot
 from electionguard.constants import get_generator
 from electionguard.election import CiphertextElectionContext
 from electionguard.group import ONE_MOD_Q, ElementModQ, add_q, mult_p, negate_q
@@ -17,6 +17,7 @@ from electionguard_tools.helpers.export import (
     GUARDIANS_DIR,
     PRIVATE_DATA_DIR,
     SPOILED_BALLOTS_DIR,
+    SUBMITTED_BALLOTS_DIR,
     TALLY_FILE_NAME,
 )
 from electionguard_tools.scripts.antiverification.processing import (
@@ -54,7 +55,9 @@ def antiverify_3_a(
     Generate an election record which fails only Verification (3.A).
     To this end, we scale a guardian's public key and adjust its
     partial decryption shares, as well as the resulting decryptions
-    which change wildly, accordingly.
+    which change wildly, accordingly. To preserve well-formedness of
+    spoiled ballots under the wild tally changes, all spoiled ballots
+    and their corresponding submitted ballots are deleted.
 
     This example requires access to private election data for ciphertext
     ballots and the guardian secret key.
@@ -107,42 +110,12 @@ def antiverify_3_a(
             )
     to_file(tally, TALLY_FILE_NAME, path.join(_cex, ELECTION_RECORD_DIR))
 
-    # Adjust spoiled ballots
+    # Delete spoiled ballots
     spoiled_ballot_path = path.join(_cex, ELECTION_RECORD_DIR, SPOILED_BALLOTS_DIR)
     for filename in listdir(spoiled_ballot_path):
-        spoiled_ballot = from_file(
-            PlaintextTally, path.join(spoiled_ballot_path, filename)
-        )
-        ciphertext = from_file(
-            CiphertextBallot,
-            path.join(
-                _data,
-                PRIVATE_DATA_DIR,
-                CIPHERTEXT_BALLOTS_DIR,
-                CIPHERTEXT_BALLOT_PREFIX + spoiled_ballot.object_id + ".json",
-            ),
-        )
-        for contest_id, contest in spoiled_ballot.contests.items():
-            for selection_id, selection in contest.selections.items():
-                nonce = next(nonces)
-                # Adjust partial decryption shares
-                edit_and_prove_selection_shares(
-                    context,
-                    spoiled_ballot,
-                    contest_id,
-                    selection_id,
-                    guardian_id,
-                    guardian_secret_key,
-                    nonce,
-                )
-                # Adjust plaintext tally
-                contest_idx, selection_idx = get_selection_index_by_id(
-                    ciphertext, contest_id, selection_id
-                )
-                R = (
-                    ciphertext.contests[contest_idx]
-                    .ballot_selections[selection_idx]
-                    .nonce
-                )
-                add_plaintext_vote(selection, negate_q(R))
-        to_file(spoiled_ballot, filename[:-5], spoiled_ballot_path)
+        remove(path.join(spoiled_ballot_path, filename))
+    submitted_ballot_path = path.join(_cex, ELECTION_RECORD_DIR, SUBMITTED_BALLOTS_DIR)
+    for filename in listdir(submitted_ballot_path):
+        ballot = from_file(SubmittedBallot, path.join(submitted_ballot_path, filename))
+        if ballot.state == BallotBoxState.SPOILED:
+            remove(path.join(submitted_ballot_path, filename))
