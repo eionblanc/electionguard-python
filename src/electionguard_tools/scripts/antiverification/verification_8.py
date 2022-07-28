@@ -1,45 +1,39 @@
 #!/usr/bin/env python
-from os import listdir, path
+from os import path
 
 # pylint: disable=no-name-in-module
 from gmpy2 import mpz
 
 from electionguard import get_small_prime, get_large_prime
-from electionguard.ballot import BallotBoxState, CiphertextBallot, SubmittedBallot
 from electionguard.big_integer import BigInteger
 from electionguard.chaum_pedersen import ChaumPedersenProof
 from electionguard.election import CiphertextElectionContext
 from electionguard.group import (
     ONE_MOD_Q,
-    ZERO_MOD_Q,
     ElementModQ,
     a_minus_b_q,
     a_plus_bc_q,
     add_q,
     g_pow_p,
-    mult_p,
     pow_p,
 )
 from electionguard.hash import hash_elems
 from electionguard.nonces import Nonces
-from electionguard.serialize import from_file
+from electionguard.serialize import from_file, to_file
 from electionguard.tally import PlaintextTally
 from electionguard.type import GuardianId
 from electionguard_tools.helpers.export import (
-    CIPHERTEXT_BALLOT_PREFIX,
     ELECTION_RECORD_DIR,
-    PRIVATE_DATA_DIR,
-    SUBMITTED_BALLOTS_DIR,
     TALLY_FILE_NAME,
 )
 
 from electionguard_tools.scripts.antiverification.processing import (
-    CIPHERTEXT_BALLOTS_DIR,
     add_plaintext_vote,
     corrupt_share_and_json_tally,
     corrupt_share_and_serialize_tally,
     duplicate_election_data,
-    get_selection_index_by_id,
+    edit_and_prove_selection_shares,
+    get_accumulation_pad_power,
     get_share_index_by_id,
     import_private_guardian_data,
 )
@@ -269,66 +263,20 @@ def antiverify_8_e(
     tally = from_file(
         PlaintextTally, path.join(_cex, ELECTION_RECORD_DIR, TALLY_FILE_NAME + ".json")
     )
-    selection = tally.contests[contest_id].selections[selection_id]
-    share_idx = get_share_index_by_id(tally, contest_id, selection_id, guardian_id)
-    share = selection.shares[share_idx]
-    A = selection.message.pad
-    B = selection.message.data
-    m = share.share
-    proof = share.proof
-    assert isinstance(proof, ChaumPedersenProof)
-
-    # Recompute values
-    a = g_pow_p(nonce)
-    b = pow_p(A, nonce)
-    m_corrupt = mult_p(m, A)
-    c_corrupt = hash_elems(context.crypto_extended_base_hash, A, B, a, b, m_corrupt)
-    v_corrupt = a_plus_bc_q(
-        nonce, private_records[guardian_id].election_keys.key_pair.secret_key, c_corrupt
-    )
-    proof_corrupt = ChaumPedersenProof(
-        pad=a,
-        data=b,
-        challenge=c_corrupt,
-        response=v_corrupt,
-        usage=proof.usage,
-    )
-
-    # Adjust plaintext tally
-    negated_R = ZERO_MOD_Q
-    submitted_ballot_path = path.join(_cex, ELECTION_RECORD_DIR, SUBMITTED_BALLOTS_DIR)
-    for filename in listdir(submitted_ballot_path):
-        ballot = from_file(SubmittedBallot, path.join(submitted_ballot_path, filename))
-        if ballot.state == BallotBoxState.CAST:
-            # Ballot was cast and thus counted in accumulation tally (if voted in contest)
-            ciphertext = from_file(
-                CiphertextBallot,
-                path.join(
-                    _data,
-                    PRIVATE_DATA_DIR,
-                    CIPHERTEXT_BALLOTS_DIR,
-                    CIPHERTEXT_BALLOT_PREFIX + ballot.object_id + ".json",
-                ),
-            )
-            contest_idx, selection_idx = get_selection_index_by_id(
-                ciphertext, contest_id, selection_id
-            )
-            if contest_idx != -1:
-                r = (
-                    ciphertext.contests[contest_idx]
-                    .ballot_selections[selection_idx]
-                    .nonce
-                )
-                negated_R = a_minus_b_q(negated_R, r)
-    add_plaintext_vote(selection, negated_R)
-
-    # Override share proof for plaintext tally
-    replacements = {"proof": proof_corrupt, "share": m_corrupt}
-    corrupt_share_and_serialize_tally(
-        _cex,
+    edit_and_prove_selection_shares(
+        context,
         tally,
         contest_id,
         selection_id,
-        share_idx,
-        replacements,
+        guardian_id,
+        private_records[guardian_id].election_keys.key_pair.secret_key,
+        nonce,
     )
+
+    # Adjust plaintext tally
+    add_plaintext_vote(
+        tally.contests[contest_id].selections[selection_id],
+        get_accumulation_pad_power(_cex, contest_id, selection_id, negate=True),
+    )
+
+    to_file(tally, TALLY_FILE_NAME, path.join(_cex, ELECTION_RECORD_DIR))

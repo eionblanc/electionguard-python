@@ -6,6 +6,7 @@ import json
 from typing import Any, List, Tuple, Optional, Dict, Union
 
 from electionguard.ballot import (
+    BallotBoxState,
     CiphertextBallot,
     CiphertextBallotContest,
     CiphertextBallotSelection,
@@ -13,7 +14,7 @@ from electionguard.ballot import (
     PlaintextBallot,
 )
 from electionguard.big_integer import BigInteger
-from electionguard.chaum_pedersen import make_chaum_pedersen
+from electionguard.chaum_pedersen import ChaumPedersenProof, make_chaum_pedersen
 from electionguard.decryption import (
     DecryptionShare,
     compute_decryption_share_for_ballot,
@@ -21,11 +22,14 @@ from electionguard.decryption import (
 from electionguard.decrypt_with_shares import decrypt_ballot
 from electionguard.election import CiphertextElectionContext
 from electionguard.election_object_base import sequence_order_sort
-from electionguard.elgamal import ElGamalCiphertext
+from electionguard.elgamal import ElGamalCiphertext, ElGamalSecretKey
 from electionguard.group import (
+    ZERO_MOD_Q,
     ElementModP,
     ElementModQ,
     ElementModQorInt,
+    a_minus_b_q,
+    a_plus_bc_q,
     add_q,
     g_pow_p,
     pow_p,
@@ -502,6 +506,78 @@ def edit_and_prove_shares(
             nonce,
             context.crypto_extended_base_hash,
         )
+
+
+def edit_and_prove_selection_shares(
+    context: CiphertextElectionContext,
+    tally: PlaintextTally,
+    contest_id: str,
+    selection_id: str,
+    guardian_id: GuardianId,
+    guardian_secret_key: ElGamalSecretKey,
+    nonce: ElementModQ,
+) -> None:
+    # Adjusts a partial share decryption effecting an incremented secret key
+    # for a particular guardian
+    selection = tally.contests[contest_id].selections[selection_id]
+    share_idx = get_share_index_by_id(tally, contest_id, selection_id, guardian_id)
+    share = selection.shares[share_idx]
+    A = selection.message.pad
+    B = selection.message.data
+    proof = share.proof
+    assert isinstance(proof, ChaumPedersenProof)
+
+    # Recompute values
+    a = g_pow_p(nonce)
+    b = pow_p(A, nonce)
+    m_corrupt = mult_p(share.share, A)
+    c_corrupt = hash_elems(context.crypto_extended_base_hash, A, B, a, b, m_corrupt)
+    v_corrupt = a_plus_bc_q(nonce, guardian_secret_key, c_corrupt)
+    share.proof = ChaumPedersenProof(
+        pad=a,
+        data=b,
+        challenge=c_corrupt,
+        response=v_corrupt,
+        usage=proof.usage,
+    )
+    share.share = m_corrupt
+
+
+def get_accumulation_pad_power(
+    _data: str,
+    contest_id: str,
+    selection_id: str,
+    negate: bool = False,
+) -> ElementModQ:
+    # Sum contest selection nonces accross all cast ballots, which
+    # is R such that the accumulation pad A satisfies A = g^R mod p
+    R = ZERO_MOD_Q
+    arithmetic_func = a_minus_b_q if negate else add_q
+    submitted_ballot_path = path.join(_data, ELECTION_RECORD_DIR, SUBMITTED_BALLOTS_DIR)
+    for filename in listdir(submitted_ballot_path):
+        ballot = from_file(SubmittedBallot, path.join(submitted_ballot_path, filename))
+        if ballot.state == BallotBoxState.CAST:
+            # Ballot was cast and thus counted in accumulation tally (if voted in contest)
+            ciphertext = from_file(
+                CiphertextBallot,
+                path.join(
+                    _data,
+                    PRIVATE_DATA_DIR,
+                    CIPHERTEXT_BALLOTS_DIR,
+                    CIPHERTEXT_BALLOT_PREFIX + ballot.object_id + ".json",
+                ),
+            )
+            contest_idx, selection_idx = get_selection_index_by_id(
+                ciphertext, contest_id, selection_id
+            )
+            if contest_idx != -1:
+                r = (
+                    ciphertext.contests[contest_idx]
+                    .ballot_selections[selection_idx]
+                    .nonce
+                )
+                R = arithmetic_func(R, r)
+    return R
 
 
 def add_plaintext_vote(

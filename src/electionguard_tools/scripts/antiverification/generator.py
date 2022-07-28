@@ -12,6 +12,7 @@ from electionguard_tools.helpers.export import (
     CONSTANTS_FILE_NAME,
 )
 from electionguard_tools.scripts.antiverification.verification_2 import antiverify_2
+from electionguard_tools.scripts.antiverification.verification_3 import antiverify_3
 from electionguard_tools.scripts.antiverification.verification_4 import antiverify_4
 from electionguard_tools.scripts.antiverification.verification_5 import antiverify_5
 from electionguard_tools.scripts.antiverification.verification_6 import antiverify_6
@@ -50,6 +51,7 @@ if __name__ == "__main__":
     selection_id_1 = "john-adams-selection"
 
     antiverify_2(_data, guardian_id)
+    antiverify_3(_data, context, guardian_id)
     antiverify_4(_data, context, ballot_id, contest_id, selection_id_0, selection_id_1)
     antiverify_5(_data, manifest, context, ballot_id, contest_id)
     antiverify_6(
