@@ -11,6 +11,7 @@ from electionguard_tools.helpers.export import (
     ELECTION_RECORD_DIR,
     CONSTANTS_FILE_NAME,
 )
+from electionguard_tools.scripts.antiverification.verification_2 import antiverify_2
 from electionguard_tools.scripts.antiverification.verification_4 import antiverify_4
 from electionguard_tools.scripts.antiverification.verification_5 import antiverify_5
 from electionguard_tools.scripts.antiverification.verification_6 import antiverify_6
@@ -41,15 +42,16 @@ if __name__ == "__main__":
 
     # Choose which ballot, contest, selection, guardian, ... to manipulate
     # Then call antiverification generation functions
+    guardian_id = GuardianId("2")
+    ballot_id_cast = "1048ce32-f1b1-4b05-b7fb-8c615ac842ee"
     ballot_id = "03a29d15-667c-4ac8-afd7-549f19b8e4eb"
     contest_id = "justice-supreme-court"
     selection_id_0 = "benjamin-franklin-selection"
     selection_id_1 = "john-adams-selection"
 
+    antiverify_2(_data, guardian_id)
     antiverify_4(_data, context, ballot_id, contest_id, selection_id_0, selection_id_1)
     antiverify_5(_data, manifest, context, ballot_id, contest_id)
-
-    ballot_id_cast = "1048ce32-f1b1-4b05-b7fb-8c615ac842ee"
     antiverify_6(
         _data,
         manifest,
@@ -59,9 +61,6 @@ if __name__ == "__main__":
         selection_id_0,
         selection_id_1,
     )
-
     antiverify_7(_data, context, contest_id, selection_id_0)
-
-    guardian_id = GuardianId("2")
     antiverify_8(_data, context, contest_id, selection_id_0, guardian_id)
     antiverify_11(_data, contest_id, selection_id_0)
