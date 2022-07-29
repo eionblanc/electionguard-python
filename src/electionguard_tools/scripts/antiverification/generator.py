@@ -51,7 +51,7 @@ if __name__ == "__main__":
     selection_id_1 = "john-adams-selection"
 
     antiverify_2(_data, guardian_id)
-    antiverify_3(_data, context, guardian_id)
+    antiverify_3(_data, manifest, context, ballot_id_cast, guardian_id)
     antiverify_4(_data, context, ballot_id, contest_id, selection_id_0, selection_id_1)
     antiverify_5(_data, manifest, context, ballot_id, contest_id)
     antiverify_6(

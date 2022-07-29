@@ -552,7 +552,9 @@ def get_accumulation_pad_power(
     # Sum contest selection nonces accross all cast ballots, which
     # is R such that the accumulation pad A satisfies A = g^R mod p
     R = ZERO_MOD_Q
-    arithmetic_func = a_minus_b_q if negate else add_q
+    arithmetic_func = (
+        (lambda x, y: a_minus_b_q(x, y)) if negate else (lambda x, y: add_q(x, y))
+    )
     submitted_ballot_path = path.join(_data, ELECTION_RECORD_DIR, SUBMITTED_BALLOTS_DIR)
     for filename in listdir(submitted_ballot_path):
         ballot = from_file(SubmittedBallot, path.join(submitted_ballot_path, filename))
