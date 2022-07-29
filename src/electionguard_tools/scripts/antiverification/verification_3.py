@@ -17,7 +17,7 @@ from electionguard.chaum_pedersen import ConstantChaumPedersenProof
 from electionguard.constants import get_generator
 from electionguard.election import CiphertextElectionContext
 from electionguard.elgamal import ElGamalCiphertext, elgamal_encrypt
-from electionguard.group import ONE_MOD_Q, ElementModQ, add_q, mult_p, negate_q
+from electionguard.group import ONE_MOD_Q, ElementModQ, add_q, mult_p, mult_q, negate_q
 from electionguard.guardian import GuardianRecord, GuardianId
 from electionguard.manifest import Manifest
 from electionguard.nonces import Nonces
@@ -25,6 +25,7 @@ from electionguard.serialize import from_file, to_file
 from electionguard.tally import PlaintextTally
 from electionguard_tools.helpers.export import (
     CIPHERTEXT_BALLOT_PREFIX,
+    CONTEXT_FILE_NAME,
     ELECTION_RECORD_DIR,
     GUARDIAN_PREFIX,
     GUARDIANS_DIR,
@@ -62,6 +63,7 @@ def antiverify_3(
     seed = ElementModQ(3)
     nonces = Nonces(seed)
     antiverify_3_a(_data, manifest, context, ballot_id, guardian_id, nonces)
+    antiverify_3_b(_data, context, nonces[0])
 
 
 def antiverify_3_a(
@@ -83,7 +85,7 @@ def antiverify_3_a(
     to exemplify a spoiled ballot that is valid after the wild changes.
 
     This example requires access to private election data for ciphertext
-    ballots and the guardian secret key.
+    ballots and guardian partial share decryption.
     """
     _cex = duplicate_election_data(_data, "3", "A")
     public_record = from_file(
@@ -117,7 +119,7 @@ def antiverify_3_a(
         path.join(_cex, ELECTION_RECORD_DIR, GUARDIANS_DIR),
     )
 
-    n = 0
+    n = 1
     for contest_id, pt_contest in tally.contests.items():
         for selection_id, pt_selection in pt_contest.selections.items():
             # Adjust partial decryption shares
@@ -301,3 +303,20 @@ def antiverify_3_a(
                 )
                 add_plaintext_vote(pt_selection, negate_q(R))
         to_file(spoiled_ballot, filename[:-5], spoiled_ballot_path)
+
+
+def antiverify_3_b(
+    _data: str,
+    context: CiphertextElectionContext,
+    nonce: ElementModQ,
+) -> None:
+    """
+    Generate an election record which fails only Verification (3.B).
+    To this end, we adjust the election base hash value, but not the
+    extended bash hash value.
+
+    This example requires no access to private election data.
+    """
+    _cex = duplicate_election_data(_data, "3", "B")
+    context.crypto_base_hash = mult_q(context.crypto_base_hash, nonce)
+    to_file(context, CONTEXT_FILE_NAME, path.join(_cex, ELECTION_RECORD_DIR))
