@@ -1,0 +1,1 @@
+{"number_of_guardians": 5, "quorum": 3, "elgamal_public_key": "44597E8CEABB51F9", "commitment_hash": "BB52", "manifest_hash": "4F1C", "crypto_base_hash": "73B9", "crypto_extended_base_hash": "8303", "extended_data": null, "configuration": {"allow_overvotes": true, "max_votes": 1000000}}

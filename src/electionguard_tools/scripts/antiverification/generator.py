@@ -11,6 +11,7 @@ from electionguard_tools.helpers.export import (
     ELECTION_RECORD_DIR,
     CONSTANTS_FILE_NAME,
 )
+from electionguard_tools.scripts.antiverification.verification_1 import antiverify_1
 from electionguard_tools.scripts.antiverification.verification_2 import antiverify_2
 from electionguard_tools.scripts.antiverification.verification_3 import antiverify_3
 from electionguard_tools.scripts.antiverification.verification_4 import antiverify_4
@@ -49,20 +50,26 @@ if __name__ == "__main__":
     contest_id = "justice-supreme-court"
     selection_id_0 = "benjamin-franklin-selection"
     selection_id_1 = "john-adams-selection"
+    run_nonstandard = False
 
-    antiverify_2(_data, guardian_id)
-    antiverify_3(_data, manifest, context, ballot_id_cast, guardian_id)
-    antiverify_4(_data, context, ballot_id, contest_id, selection_id_0, selection_id_1)
-    antiverify_5(_data, manifest, context, ballot_id, contest_id)
-    antiverify_6(
-        _data,
-        manifest,
-        context,
-        ballot_id_cast,
-        contest_id,
-        selection_id_0,
-        selection_id_1,
-    )
-    antiverify_7(_data, context, contest_id, selection_id_0)
-    antiverify_8(_data, context, contest_id, selection_id_0, guardian_id)
-    antiverify_11(_data, contest_id, selection_id_0)
+    if run_nonstandard:
+        antiverify_1(_data, manifest, context, constants)
+    else:
+        antiverify_2(_data, guardian_id)
+        antiverify_3(_data, manifest, context, ballot_id_cast, guardian_id)
+        antiverify_4(
+            _data, context, ballot_id, contest_id, selection_id_0, selection_id_1
+        )
+        antiverify_5(_data, manifest, context, ballot_id, contest_id)
+        antiverify_6(
+            _data,
+            manifest,
+            context,
+            ballot_id_cast,
+            contest_id,
+            selection_id_0,
+            selection_id_1,
+        )
+        antiverify_7(_data, context, contest_id, selection_id_0)
+        antiverify_8(_data, context, contest_id, selection_id_0, guardian_id)
+        antiverify_11(_data, contest_id, selection_id_0)

@@ -54,6 +54,10 @@ MEDIUM_TEST_CONSTANTS = create_constants(65267, 32633, 2, 3)
 LARGE_TEST_CONSTANTS = create_constants(
     18446744073704586917, 65521, 281539415968996, 15463152587872997502
 )
+# Corresponds to LARGE_TEST_CONSTANTS with g = 3^r mod p rather than g = 2^r mod p
+TEST_CONSTANTS_1_d = create_constants(
+    18446744073704586917, 65521, 281539415968996, 5576342438279618914
+)
 
 
 class PrimeOption(Enum):
@@ -61,6 +65,7 @@ class PrimeOption(Enum):
 
     Standard = "Standard"
     TestOnly = "TestOnly"
+    Antiverification_1_d = "Antiverification_1_d"
 
 
 def get_constants() -> ElectionConstants:
@@ -73,6 +78,7 @@ def get_constants() -> ElectionConstants:
     option_map = {
         PrimeOption.Standard: STANDARD_CONSTANTS,
         PrimeOption.TestOnly: LARGE_TEST_CONSTANTS,
+        PrimeOption.Antiverification_1_d: TEST_CONSTANTS_1_d,
     }
     return option_map.get(option) or STANDARD_CONSTANTS
 
