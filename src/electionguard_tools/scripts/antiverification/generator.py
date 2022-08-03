@@ -36,6 +36,10 @@ if __name__ == "__main__":
         path.join(_data, ELECTION_RECORD_DIR, CONSTANTS_FILE_NAME + ".json"),
     )
     # Assume the constants are the LARGE_TEST_CONSTANTS
+    # For speed of example generation, the LARGE_TEST_CONSTANTS are used as defaults
+    # and all examples should translate to the specification constants case as well.
+    # In particular, all generated election records should violate Verification 1
+    # until this default is changed.
     environ.setdefault("PRIME_OPTION", "TestOnly")
     context = from_file(
         CiphertextElectionContext,
@@ -50,11 +54,20 @@ if __name__ == "__main__":
     contest_id = "justice-supreme-court"
     selection_id_0 = "benjamin-franklin-selection"
     selection_id_1 = "john-adams-selection"
-    run_nonstandard = False
 
-    if run_nonstandard:
-        antiverify_1(_data, manifest, context, constants)
-    else:
+    # Select which examples to generate
+    # Non-standard examples like (1.B) and (1.D) require special constants that
+    # are difficult to run in succession with other sets of parameters.
+    # Most examples use the default set, deemed standard here.
+    run_selections = [
+        "Standard",
+        "1B",
+        "1D",
+    ]
+    run_s = run_selections[0]
+
+    antiverify_1(run_s, _data, manifest, context)
+    if run_s == "Standard":
         antiverify_2(_data, guardian_id)
         antiverify_3(_data, manifest, context, ballot_id_cast, guardian_id)
         antiverify_4(

@@ -19,7 +19,7 @@ from electionguard.decryption_share import DecryptionShare
 from electionguard.election import CiphertextElectionContext
 from electionguard.election_polynomial import LagrangeCoefficientsRecord
 from electionguard.encrypt import EncryptionDevice, EncryptionMediator
-from electionguard.group import ElementModP, mult_p, pow_p
+from electionguard.group import ElementModP, mult_p
 from electionguard.guardian import Guardian
 from electionguard.key_ceremony import (
     ElectionJointKey,
@@ -47,17 +47,47 @@ from electionguard_tools.scripts.antiverification.processing import (
 
 
 def antiverify_1(
+    run_selection: str,
     _data: str,
     manifest: Manifest,
     context: CiphertextElectionContext,
-    constants: ElectionConstants,
 ) -> None:
     """
     For each subcheck in Verification 1, generate an election record
     which fails only that subcheck.
     """
-    antiverify_1_c(_data)
-    antiverify_1_d(_data, manifest, context, constants)
+    if run_selection == "Standard":
+        antiverify_1_c(_data)
+    elif run_selection == "1B":
+        print("Running (1.B)...")
+        antiverify_1_b(_data, manifest, context)
+        print("...done!")
+    elif run_selection == "1D":
+        print("Running (1.D)...")
+        antiverify_1_d(_data, manifest, context)
+        print("...done!")
+
+
+def antiverify_1_b(
+    _data: str,
+    manifest: Manifest,
+    context: CiphertextElectionContext,
+) -> None:
+    """
+    Generate an election record which fails only Verification (1.B).
+    To this end, we adjust the small prime and cofactor constants then
+    re-run the election.
+    Currently, the imported (nonstandard) constants are not restored to
+    the usual test constants; no other verification checks should be
+    run after this.
+
+    This example requires access to private election data for the plaintext
+    ballots and guardian keys.
+    """
+    environ["PRIME_OPTION"] = "Antiverification_1_b"
+    reload(electionguard.constants)
+    _cex = duplicate_election_data(_data, "1", "B")
+    rerun_election(_cex, manifest, context)
 
 
 def antiverify_1_c(_data: str) -> None:
@@ -77,12 +107,10 @@ def antiverify_1_c(_data: str) -> None:
     to_file(constants, CONSTANTS_FILE_NAME, path.join(_cex, ELECTION_RECORD_DIR))
 
 
-# pylint: disable=too-many-statements
 def antiverify_1_d(
     _data: str,
     manifest: Manifest,
     context: CiphertextElectionContext,
-    constants: ElectionConstants,
 ) -> None:
     """
     Generate an election record which fails only Verification (1.D).
@@ -96,21 +124,26 @@ def antiverify_1_d(
     """
     environ["PRIME_OPTION"] = "Antiverification_1_d"
     reload(electionguard.constants)
-
     _cex = duplicate_election_data(_data, "1", "D")
-    constants.generator = pow_p(ElementModP(3), ElementModP(constants.cofactor))
-    to_file(constants, CONSTANTS_FILE_NAME, path.join(_cex, ELECTION_RECORD_DIR))
+    rerun_election(_cex, manifest, context)
 
+
+# pylint: disable=too-many-statements
+def rerun_election(
+    _data: str,
+    manifest: Manifest,
+    context: CiphertextElectionContext,
+) -> None:
     # Get plaintext ballots
     plaintext_ballots: List[PlaintextBallot] = []
-    plaintext_ballot_path = path.join(_cex, PRIVATE_DATA_DIR, PLAINTEXT_BALLOTS_DIR)
+    plaintext_ballot_path = path.join(_data, PRIVATE_DATA_DIR, PLAINTEXT_BALLOTS_DIR)
     for filename in listdir(plaintext_ballot_path):
         ballot = from_file(PlaintextBallot, path.join(plaintext_ballot_path, filename))
         plaintext_ballots.append(ballot)
 
     # Determine which ballots should be spoiled
     spoiled_ballot_ids: List[str] = []
-    submitted_ballot_path = path.join(_cex, ELECTION_RECORD_DIR, SUBMITTED_BALLOTS_DIR)
+    submitted_ballot_path = path.join(_data, ELECTION_RECORD_DIR, SUBMITTED_BALLOTS_DIR)
     for filename in listdir(submitted_ballot_path):
         submitted_ballot = from_file(
             SubmittedBallot, path.join(submitted_ballot_path, filename)
@@ -181,11 +214,11 @@ def antiverify_1_d(
     assert isinstance(internal_manifest, InternalManifest)
     assert isinstance(context, CiphertextElectionContext)
 
-    for filename in listdir(path.join(_cex, ELECTION_RECORD_DIR, DEVICES_DIR)):
+    for filename in listdir(path.join(_data, ELECTION_RECORD_DIR, DEVICES_DIR)):
         # Assume just a single encryption device
         device = from_file(
             EncryptionDevice,
-            path.join(_cex, ELECTION_RECORD_DIR, DEVICES_DIR, filename),
+            path.join(_data, ELECTION_RECORD_DIR, DEVICES_DIR, filename),
         )
     encrypter = EncryptionMediator(internal_manifest, context, device)
 
@@ -233,8 +266,8 @@ def antiverify_1_d(
         guardian.export_private_data() for guardian in guardians
     ]
 
-    if path.exists(_cex):
-        shutil.rmtree(_cex)
+    if path.exists(_data):
+        shutil.rmtree(_data)
     export_record(
         manifest,
         context,
@@ -246,11 +279,11 @@ def antiverify_1_d(
         plaintext_tally,
         guardian_records,
         lagrange_coefficients,
-        election_record_directory=path.join(_cex, ELECTION_RECORD_DIR),
+        election_record_directory=path.join(_data, ELECTION_RECORD_DIR),
     )
     export_private_data(
         plaintext_ballots,
         ciphertext_ballots,
         private_guardian_records,
-        private_directory=path.join(_cex, PRIVATE_DATA_DIR),
+        private_directory=path.join(_data, PRIVATE_DATA_DIR),
     )

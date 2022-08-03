@@ -9,7 +9,7 @@ _PAD_INDICATOR_SIZE = 2
 class DataSize(IntEnum):
     """Define the sizes for data."""
 
-    Bytes_512 = 512
+    Bytes_512 = 1056
 
 
 class TruncationError(ValueError):
