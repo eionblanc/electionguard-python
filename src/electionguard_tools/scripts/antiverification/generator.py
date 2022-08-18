@@ -61,10 +61,11 @@ if __name__ == "__main__":
     # Most examples use the default set, deemed standard here.
     run_selections = [
         "Standard",
+        "1A",
         "1B",
         "1D",
     ]
-    run_s = run_selections[0]
+    run_s = run_selections[1]
 
     antiverify_1(run_s, _data, manifest, context)
     if run_s == "Standard":

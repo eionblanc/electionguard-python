@@ -58,6 +58,10 @@ def antiverify_1(
     """
     if run_selection == "Standard":
         antiverify_1_c(_data)
+    elif run_selection == "1A":
+        print("Running (1.A)...")
+        antiverify_1_a(_data, manifest, context)
+        print("...done!")
     elif run_selection == "1B":
         print("Running (1.B)...")
         antiverify_1_b(_data, manifest, context)
@@ -66,6 +70,29 @@ def antiverify_1(
         print("Running (1.D)...")
         antiverify_1_d(_data, manifest, context)
         print("...done!")
+
+
+def antiverify_1_a(
+    _data: str,
+    manifest: Manifest,
+    context: CiphertextElectionContext,
+) -> None:
+    """
+    Generate an election record which fails Verification (1.A);
+    Verification (1.C) also fails since q no longer divides the large prime minus 1,
+    which we allow under plans to later remove the (1.C) check from verification.
+    To this end, we adjust the large prime then re-run the election.
+    Currently, the imported (nonstandard) constants are not restored to
+    the usual test constants; no other verification checks should be
+    run after this.
+
+    This example requires access to private election data for the plaintext
+    ballots and guardian keys.
+    """
+    environ["PRIME_OPTION"] = "Antiverification_1_a"
+    reload(electionguard.constants)
+    _cex = duplicate_election_data(_data, "1", "A")
+    rerun_election(_cex, manifest, context)
 
 
 def antiverify_1_b(

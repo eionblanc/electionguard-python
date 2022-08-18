@@ -1,0 +1,243 @@
+{
+  "spec_version": "1.0",
+  "election_scope_id": "jefferson-county-primary",
+  "start_date": "2020-03-01T08:00:00-05:00",
+  "end_date": "2020-03-01T20:00:00-05:00",
+  "verifier": "MITRE ElectionGuard Verifier",
+  "run_date": "2022-08-17T15:42:03.551",
+  "verified": false,
+  "answers": [
+    {
+      "step": 1,
+      "items": "AC",
+      "section": "Parameter verification",
+      "comment": "Cofactor is not standard.",
+      "count": 4,
+      "failed": 2
+    },
+    {
+      "step": 2,
+      "items": "",
+      "section": "Guardian public-key validation",
+      "comment": "Guardian pubkeys are valid.",
+      "count": 5,
+      "failed": 0
+    },
+    {
+      "step": 3,
+      "items": "",
+      "section": "Election public-key validation",
+      "comment": "Election pubkey is valid.",
+      "count": 1,
+      "failed": 0
+    },
+    {
+      "step": 4,
+      "items": "",
+      "section": "Correctness of selection encryption",
+      "comment": "Selection encryptions are valid.",
+      "count": 6,
+      "failed": 0
+    },
+    {
+      "step": 5,
+      "items": "",
+      "section": "Adherence to vote limits",
+      "comment": "Vote limits are adhered to.",
+      "count": 6,
+      "failed": 0
+    },
+    {
+      "step": 6,
+      "items": "",
+      "section": "Validation of confirmation codes",
+      "comment": "No duplicate confirmation codes found.",
+      "count": 6,
+      "failed": 0
+    },
+    {
+      "step": 7,
+      "items": "",
+      "section": "Correctness of ballot aggregation",
+      "comment": "Tally aggregation is correct.",
+      "count": 6,
+      "failed": 0
+    },
+    {
+      "step": 8,
+      "items": "",
+      "section": "Correctness of partial decryptions",
+      "comment": "Tally partial decryptions are correct.",
+      "count": 30,
+      "failed": 0
+    },
+    {
+      "step": 9,
+      "items": "",
+      "section": "Correctness of substitute data for missing guardians",
+      "comment": "Tally substitute decryptions are correct.",
+      "count": 0,
+      "failed": 0
+    },
+    {
+      "step": 10,
+      "items": "",
+      "section": "Correctness of construction of replacement partial decryption",
+      "comment": "Coefficients validated.",
+      "count": 5,
+      "failed": 0
+    },
+    {
+      "step": 10,
+      "items": "",
+      "section": "Correctness of construction of replacement partial decryptions",
+      "comment": "Missing tally shares are correct.",
+      "count": 0,
+      "failed": 0
+    },
+    {
+      "step": 11,
+      "items": "",
+      "section": "Validation of correct decryption of tallies",
+      "comment": "Tally decryptions are correct.",
+      "count": 6,
+      "failed": 0
+    },
+    {
+      "step": 11,
+      "items": "",
+      "section": "Validation of correct decryption of tallies",
+      "comment": "Tally selections agree with the manifest.",
+      "count": 4,
+      "failed": 0
+    },
+    {
+      "step": 12,
+      "items": "",
+      "section": "Correctness of partial decryptions",
+      "comment": "Spoiled ballot 03a29d15-667c-4ac8-afd7-549f19b8e4eb partial decryptions are correct.",
+      "count": 20,
+      "failed": 0
+    },
+    {
+      "step": 13,
+      "items": "",
+      "section": "Correctness of substitute data for missing guardians",
+      "comment": "Spoiled ballot 03a29d15-667c-4ac8-afd7-549f19b8e4eb substitute decryptions are correct.",
+      "count": 0,
+      "failed": 0
+    },
+    {
+      "step": 14,
+      "items": "",
+      "section": "Correctness of construction of replacement partial decryptions",
+      "comment": "Missing spoiled ballot 03a29d15-667c-4ac8-afd7-549f19b8e4eb shares are correct.",
+      "count": 0,
+      "failed": 0
+    },
+    {
+      "step": 15,
+      "items": "",
+      "section": "Validation of correct decryption of tallies",
+      "comment": "Spoiled ballot 03a29d15-667c-4ac8-afd7-549f19b8e4eb decryptions are correct.",
+      "count": 4,
+      "failed": 0
+    },
+    {
+      "step": 15,
+      "items": "",
+      "section": "Validation of correct decryption of tallies",
+      "comment": "Spoiled ballot 03a29d15-667c-4ac8-afd7-549f19b8e4eb selections agree with the manifest.",
+      "count": 3,
+      "failed": 0
+    },
+    {
+      "step": 12,
+      "items": "",
+      "section": "Correctness of partial decryptions",
+      "comment": "Spoiled ballot 5a150c74-a2cb-47f6-b575-165ba8a4ce53 partial decryptions are correct.",
+      "count": 30,
+      "failed": 0
+    },
+    {
+      "step": 13,
+      "items": "",
+      "section": "Correctness of substitute data for missing guardians",
+      "comment": "Spoiled ballot 5a150c74-a2cb-47f6-b575-165ba8a4ce53 substitute decryptions are correct.",
+      "count": 0,
+      "failed": 0
+    },
+    {
+      "step": 14,
+      "items": "",
+      "section": "Correctness of construction of replacement partial decryptions",
+      "comment": "Missing spoiled ballot 5a150c74-a2cb-47f6-b575-165ba8a4ce53 shares are correct.",
+      "count": 0,
+      "failed": 0
+    },
+    {
+      "step": 15,
+      "items": "",
+      "section": "Validation of correct decryption of tallies",
+      "comment": "Spoiled ballot 5a150c74-a2cb-47f6-b575-165ba8a4ce53 decryptions are correct.",
+      "count": 6,
+      "failed": 0
+    },
+    {
+      "step": 15,
+      "items": "",
+      "section": "Validation of correct decryption of tallies",
+      "comment": "Spoiled ballot 5a150c74-a2cb-47f6-b575-165ba8a4ce53 selections agree with the manifest.",
+      "count": 4,
+      "failed": 0
+    },
+    {
+      "step": 12,
+      "items": "",
+      "section": "Correctness of partial decryptions",
+      "comment": "Spoiled ballot 9fee0e77-cfd2-401a-a210-93bbc4dd30ef partial decryptions are correct.",
+      "count": 30,
+      "failed": 0
+    },
+    {
+      "step": 13,
+      "items": "",
+      "section": "Correctness of substitute data for missing guardians",
+      "comment": "Spoiled ballot 9fee0e77-cfd2-401a-a210-93bbc4dd30ef substitute decryptions are correct.",
+      "count": 0,
+      "failed": 0
+    },
+    {
+      "step": 14,
+      "items": "",
+      "section": "Correctness of construction of replacement partial decryptions",
+      "comment": "Missing spoiled ballot 9fee0e77-cfd2-401a-a210-93bbc4dd30ef shares are correct.",
+      "count": 0,
+      "failed": 0
+    },
+    {
+      "step": 15,
+      "items": "",
+      "section": "Validation of correct decryption of tallies",
+      "comment": "Spoiled ballot 9fee0e77-cfd2-401a-a210-93bbc4dd30ef decryptions are correct.",
+      "count": 6,
+      "failed": 0
+    },
+    {
+      "step": 15,
+      "items": "",
+      "section": "Validation of correct decryption of tallies",
+      "comment": "Spoiled ballot 9fee0e77-cfd2-401a-a210-93bbc4dd30ef selections agree with the manifest.",
+      "count": 4,
+      "failed": 0
+    },
+    {
+      "step": 16,
+      "items": "",
+      "section": "Validation of correctness of spoiled ballots",
+      "comment": "Spoiled ballots are well-formed.",
+      "count": 3,
+      "failed": 0
+    }
+  ]
+}
